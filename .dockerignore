@@ -1,0 +1,33 @@
+# 构建上下文瘦身 —— 直接影响 docker build 的耗时与缓存命中率。
+# 注意 test/ 与 README.md 必须留着：gate 阶段跑回归测试要用。
+
+# 版本库数据（体积大、且不该进镜像）
+.git
+.gitattributes
+.github
+.gitignore
+
+# 本地缓存：上游 zpix 字体 6.85 MB 就放在这里
+.cache
+**/.cache
+
+# 编辑器 / 操作系统垃圾
+.vscode
+.idea
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# 测试与脚本的临时输出
+*.log
+test_out.txt
+out.txt
+urls.txt
+httpres.txt
+
+# 本机 Python 环境
+__pycache__
+*.pyc
+.venv
+venv

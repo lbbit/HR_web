@@ -1,0 +1,91 @@
+# =============================================================================
+#  魔幻赛马 / Horse Racing —— 域名 + 自动 HTTPS 部署（Caddy 反向代理）
+#
+#  这是 docker-compose.yml 的**替代**方案，不是叠加层：
+#
+#    1. 把域名 A 记录指向本机，放通 80 / 443
+#    2. HR_DOMAIN=hr.example.com docker compose -f docker-compose.https.yml up -d
+#
+#  Caddy 会自动申请并续期 Let's Encrypt 证书，并在 80 端口做 HTTP→HTTPS 跳转。
+#  web 服务不再对外发布端口，只在 compose 网络内可见，所有流量必须过 Caddy。
+#
+#  改端口/时区等公共变量与 docker-compose.yml 保持一致。
+# =============================================================================
+
+name: hr-web-tls
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SKIP_TESTS: "${SKIP_TESTS:-0}"
+    image: "${HR_WEB_IMAGE:-hr-web:latest}"
+    container_name: hr-web
+    restart: unless-stopped
+
+    # 关键区别：这里不写 ports，只在内部网络暴露。
+    # 公网只能经 Caddy 访问，容器内 8080 不直接暴露到宿主机。
+    expose:
+      - "8080"
+
+    environment:
+      TZ: "${TZ:-Asia/Shanghai}"
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+      - /var/cache/nginx:rw,noexec,nosuid,size=8m,mode=1777
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: hr-web-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"     # HTTP/3
+    environment:
+      # 必填：不给值直接报错退出，避免误用占位域名去申请证书
+      HR_DOMAIN: "${HR_DOMAIN:?请设置 HR_DOMAIN，例如 HR_DOMAIN=hr.example.com}"
+      # 测试时可指向 Let's Encrypt 预发布环境，避免触发速率限制
+      ACME_CA: "${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # 证书与私钥，必须持久化，否则每次重启都重新申请
+      - caddy_config:/config
+    depends_on:
+      web:
+        # 等 web 通过健康检查再起 Caddy，避免首请求 502
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:

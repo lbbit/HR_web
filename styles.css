@@ -4,11 +4,19 @@
    scaled to fit the viewport. All screen chrome is the ORIGINAL pixel-art
    background images; controls are the original button/label PNGs. */
 
+/* Zpix pixel CJK face, self-hosted.
+   The original Qt game had no font — its Chinese was baked into PNGs — so the
+   web port needs a pixel face for *dynamic* text (usernames, scores, timer).
+   Upstream zpix.ttf is 6.85 MB; tools/subset-font.py trims it to 284 KB
+   (ASCII + the full GB2312 repertoire) and proves every retained glyph is
+   outline-identical. Self-hosting keeps the container working with no egress. */
 @font-face {
   font-family: 'Zpix';
-  src: local('Zpix'), local('Zpix Pixel'),
-       url('https://cdn.jsdelivr.net/gh/SolidZORO/zpix-pixel-font/dist/zpix.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
   font-display: swap;
+  src: local('Zpix'), local('Zpix Pixel'),
+       url('./assets/fonts/zpix-subset.woff2') format('woff2');
 }
 
 :root {

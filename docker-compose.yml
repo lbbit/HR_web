@@ -1,0 +1,77 @@
+# =============================================================================
+#  魔幻赛马 / Horse Racing —— 一键部署
+#
+#    docker compose up -d --build      # 构建并启动 → http://localhost:8080
+#    docker compose logs -f            # 跟随日志
+#    docker compose ps                 # 看健康状态
+#    docker compose down               # 停止并移除
+#
+#  常用覆盖（都走环境变量，不必改文件）：
+#    HR_WEB_PORT=80     对外 HTTP 端口，默认 8080
+#    HR_WEB_IMAGE       镜像名/tag，默认 hr-web:latest
+#    SKIP_TESTS=1       跳过镜像内的回归测试（应急用，正常不要开）
+#    TZ                 容器时区，只影响日志时间戳
+#
+#  需要域名 + 自动 HTTPS：改用 docker-compose.https.yml
+# =============================================================================
+
+name: hr-web
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SKIP_TESTS: "${SKIP_TESTS:-0}"
+    image: "${HR_WEB_IMAGE:-hr-web:latest}"
+    container_name: hr-web
+    restart: unless-stopped
+
+    # 容器内固定 8080（与 rootless 基础镜像约定一致），对外端口可自由改
+    ports:
+      - "${HR_WEB_PORT:-8080}:8080"
+
+    environment:
+      TZ: "${TZ:-Asia/Shanghai}"
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    # ---- 最小权限 ----------------------------------------------------------
+    # 基础镜像本身就以 uid 101 运行；这里再把 capabilities 全部摘掉，
+    # 并禁止进程提权（no-new-privileges），nginx 只是读文件发字节，全都不需要。
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+    # 根文件系统只读。nginx 的运行期写入点已全部收敛到 /tmp
+    # （pid、client_body/proxy/fastcgi 等 temp_path 都指向 /tmp），
+    # 日志走 /dev/stdout 与 /dev/stderr，所以整机不需要写根目录。
+    # 万一你的宿主机/镜像版本仍会写别处，把 read_only 改成 false 即可，
+    # 其余加固项仍然生效。
+    read_only: true
+    tmpfs:
+      # nginx 的 pid 与临时请求体
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+      # 保险栓：某些镜像版本仍会尝试 mkdir /var/cache/nginx/*
+      # （只读根文件系统下会报 mkdir() failed (30: Read-only file system)）
+      - /var/cache/nginx:rw,noexec,nosuid,size=8m,mode=1777
+
+    stop_grace_period: 10s
+
+    # ---- 资源与日志上限：防止一个静态站点吃满宿主机 --------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"

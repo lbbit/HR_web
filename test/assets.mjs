@@ -46,8 +46,8 @@ const allFiles = [];
   }
 })('assets');
 const inManifest = new Set(list.map((s) => s.replace(/^\.\//, '')));
-// referenced from index.html, not preloaded by JS
-const ALLOWED_EXTRA = new Set(['assets/ui/favicon.ico']);
+// referenced from index.html / CSS / the nginx 404 page, not preloaded by JS
+const ALLOWED_EXTRA = new Set(['assets/ui/favicon.ico', 'assets/fonts/zpix-subset.woff2']);
 const orphans = allFiles.filter((f) => !inManifest.has(f) && !ALLOWED_EXTRA.has(f));
 console.log(`assets on disk   : ${allFiles.length}   orphans (not preloaded): ${orphans.length}`);
 if (orphans.length) for (const o of orphans.slice(0, 20)) console.log('  ORPHAN ' + o);
@@ -65,10 +65,40 @@ console.log(`case mismatches  : ${caseBad}`);
 bad += caseBad;
 
 // ---- core page files
-const core = ['index.html', 'styles.css', 'src/main.js', 'src/game.js', 'src/audio.js', 'src/storage.js', 'src/assets.js', 'assets/ui/favicon.ico', 'README.md'];
+const core = ['index.html', 'styles.css', 'src/main.js', 'src/game.js', 'src/audio.js', 'src/storage.js', 'src/assets.js', 'assets/ui/favicon.ico', 'assets/fonts/zpix-subset.woff2', 'README.md'];
 for (const c of core) {
   if (!fs.existsSync(path.join(ROOT, c))) { console.log('MISSING CORE ' + c); bad++; }
 }
+
+// ---- references written in markup, which the JS manifest cannot see --------
+// The pixel font is loaded from CSS and preloaded from <head>, so a typo there
+// is invisible to manifest() and would silently burn a request (plus a console
+// warning) instead of failing. Anything the browser is told to fetch must exist.
+const MARKUP = ['index.html', 'styles.css', 'deploy/nginx/404.html'];
+const refs = new Set();
+for (const f of MARKUP) {
+  const abs = path.join(ROOT, f);
+  if (!fs.existsSync(abs)) { console.log('MISSING MARKUP FILE ' + f); bad++; continue; }
+  const text = fs.readFileSync(abs, 'utf8');
+  for (const m of text.matchAll(/(?:src|href)\s*=\s*["']([^"']+)["']/g)) refs.add(m[1]);
+  for (const m of text.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)) refs.add(m[1]);
+}
+const localRefs = [...refs].filter(
+  (u) => !/^(?:https?:)?\/\//.test(u) && !u.startsWith('data:') && !u.startsWith('#')
+);
+console.log(`markup refs       : ${refs.size} total, ${localRefs.length} local (in ${MARKUP.length} files)`);
+let refBad = 0;
+for (const u of localRefs) {
+  // a leading '/' means "relative to the served web root", which is the repo root
+  const rel = u.replace(/^\.\//, '').replace(/^\//, '').split(/[?#]/)[0];
+  if (!rel) continue;
+  if (!fs.existsSync(path.join(ROOT, rel))) { console.log('BROKEN REF  ' + u + '  -> ' + rel); refBad++; continue; }
+  if (rel.startsWith('assets/') && !exact.has(rel)) { console.log('REF CASE MISMATCH  ' + u); refBad++; }
+}
+console.log(`broken markup refs: ${refBad}`);
+bad += refBad;
+// anti-vacuity: the scan must actually have found the preload + @font-face
+if (localRefs.length < 3) { console.log(`TOO FEW MARKUP REFS (${localRefs.length}) — scanner is broken`); bad++; }
 
 // ---- HTTP check
 if (BASE) {

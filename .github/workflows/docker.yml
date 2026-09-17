@@ -1,0 +1,81 @@
+# =============================================================================
+#  构建并发布容器镜像到 GitHub Container Registry
+#
+#  镜像内的构建过程本身就带着回归测试闸门（见 Dockerfile 的 gate 阶段），
+#  所以这个工作流同时也是 CI：测试不过 → 构建失败 → 不会产出镜像。
+#
+#  发布：
+#    push 到 main            → ghcr.io/<owner>/hr_web:main 与 :latest
+#    打 v* tag（如 v2.1.0）  → ghcr.io/<owner>/hr_web:2.1.0 / :2.1 / :latest
+#    pull_request            → 只构建验证，不推送
+#
+#  服务器上直接拉取运行：
+#    docker run -d --name hr-web -p 8080:8080 ghcr.io/lbbit/hr_web:latest
+# =============================================================================
+
+name: docker
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # GHCR 的镜像名必须全小写，而仓库名是 HR_web。
+      # 不做这一步，push 会以 "invalid reference format" 失败。
+      - name: 归一化镜像名为全小写
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: 启用 Buildx（多架构构建 + 缓存）
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GHCR（PR 不需要）
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 生成 tag 与 OCI 标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: 构建并推送
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          # PR 只验证能否构建，不推送
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # 回归测试闸门保持开启
+          build-args: |
+            SKIP_TESTS=0
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

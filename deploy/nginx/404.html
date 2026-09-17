@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex" />
+<title>404 · 魔幻赛马</title>
+<!--
+  像素风 404 页。只引用同源素材（绝对路径，因为任意层级都可能 404），
+  不依赖任何 CDN —— 容器在内网无外网出口时同样正常。
+  由 nginx 的 error_page 内部跳转使用（location = /404.html { internal; }）。
+-->
+<style>
+  @font-face {
+    font-family: 'Zpix';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: local('Zpix'),
+         url('/assets/fonts/zpix-subset.woff2') format('woff2');
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Zpix', ui-monospace, 'Courier New', Consolas, monospace;
+    background: #0a3a5c url('/assets/bg/BG0.webp') center / cover no-repeat fixed;
+    image-rendering: pixelated;
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-font-smoothing: none; font-smooth: never;
+  }
+  .panel {
+    width: min(90vw, 460px);
+    background: #12253a;
+    border: 4px solid #000;
+    box-shadow: 0 0 0 4px #ffd24a, 0 14px 40px rgba(0, 0, 0, .7);
+    padding: 28px 24px 24px;
+    text-align: center;
+  }
+  .code {
+    font-size: 64px; line-height: 1; letter-spacing: 4px;
+    color: #ffd24a; text-shadow: 4px 4px 0 #000;
+  }
+  .msg { margin-top: 14px; font-size: 17px; line-height: 1.7; text-shadow: 2px 2px 0 #000; }
+  .hint { margin-top: 6px; font-size: 13px; color: #9fc4dd; }
+  a.home {
+    display: inline-block; margin-top: 20px;
+    font-size: 16px; padding: 9px 20px;
+    color: #101010; background: #ffd24a;
+    border: 3px solid #000; box-shadow: 3px 3px 0 #000;
+    text-decoration: none;
+  }
+  a.home:active { transform: translate(3px, 3px); box-shadow: none; }
+  a.home:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <div class="code">404</div>
+    <div class="msg">这条赛道上没有这匹马</div>
+    <div class="hint">请求的地址不存在，可能已经被移走了。</div>
+    <a class="home" href="/">回到赛场</a>
+  </div>
+</body>
+</html>

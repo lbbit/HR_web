@@ -51,11 +51,17 @@
 - **整屏等比缩放**：每个界面按原作分辨率建一个固定尺寸舞台
   （竖屏 `450×600`、比赛 `1000×622`、结算 `740×480`），整体 `transform: scale()` 适配窗口，
   配 `image-rendering: pixelated` 保证放大后依然是硬边像素，不糊不插值。
-- **动态中文**（用户名、分数、日志）用 **Zpix 最像素字体**（CDN 引入，含等宽回退），
-  与原作像素字风格统一。
+- **动态中文**（用户名、分数、日志）用 **Zpix 最像素字体**，并把字体也收进了仓库，
+  全站不再依赖任何 CDN。上游字体 6.85 MB（22000+ 字形），`tools/subset-font.py`
+  把它裁到 **284 KB**：保留 ASCII + **完整 GB2312 字库**（6763 个常用汉字，
+  玩家随便输入什么中文名都能用像素字显示）+ CJK 标点与符号，
+  并**逐字形比对轮廓**证明裁出来的和上游完全一致（7736 个字形，0 差异）。
+  另有 2 个字符原字体本就没有字形 —— `🐎`（加载页）与 `🔒`（未解锁马匹），
+  这两个交给系统 emoji 字体渲染。
 
 素材体积：原作 330 个文件约 21 MB → **314 个无损 WebP 共 0.81 MB**
 （`ffmpeg -c:v libwebp -lossless 1`，已逐张解码回环校验为像素完全一致）。
+加上字体子集 0.28 MB，整个站点约 **1.1 MB**，且全部为静态文件。
 
 ---
 
@@ -88,17 +94,51 @@
 ## 特性
 
 - **原生 ES Module**，无框架、无构建步骤、无依赖，直接由静态服务器托管即可。
-- **零外部运行时依赖**：唯一外链是像素中文字体（jsDelivr CDN），其余全部本地。
+- **零外部依赖**：全站（含字体）无任何外部引用，内网 / 断网环境同样可用。
+  构建阶段会扫源码，一旦出现会发起外部请求的写法就直接构建失败。
 - **程序化音频**（Web Audio API）：3 首可切换的电子/芯片风 BGM（霓虹疾驰 / 合成德比 / 像素冲刺）
   \+ 动态音效（按键对错、倒计时、马蹄、胜负、解锁），零音频文件，取代原作约 1.1 MB 的 WAV。
 - **完整进度系统**：注册/登录、改名改密、简单/困难双榜（Top 5）、20 匹马收集、
   累计局数/时长/路程、最高分与最高排名、管理员用户管理。
 - **本地存档**：`localStorage`（键 `hrweb_save_v2`），无需后端。
+- **一条命令容器化部署**：多阶段构建（**回归测试作为构建闸门**）、rootless nginx、
+  只读根文件系统、`/healthz` 健康检查、多架构镜像、CI 自动发布到 GHCR。
 - 首次打开会自动预置演示账号：`admin / admin`（管理员）与 `lbb / 1234`。
 
 ## 运行
 
-纯静态站点，任意静态服务器即可：
+### 一、Docker（推荐）
+
+```bash
+docker compose up -d --build
+# → http://localhost:8080
+```
+
+首次构建会先把仓库自带的回归测试跑一遍（见「验证」一节），所以头一回会慢一些，
+之后有构建缓存就很快。
+
+| 命令 | 作用 |
+| --- | --- |
+| `docker compose up -d --build` | 构建并启动 |
+| `docker compose logs -f` | 跟随日志 |
+| `docker compose ps` | 查看容器与健康状态 |
+| `docker compose down` | 停止并移除 |
+
+换个对外端口：`HR_WEB_PORT=8081 docker compose up -d`
+装了 `make` 的话更省事：`make up` / `make logs` / `make ps` / `make down`（`make help` 看全部）。
+
+### 二、服务器裸机一键脚本
+
+```bash
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/lbbit/HR_web/main/deploy/quickstart.sh)"
+```
+
+脚本会检查 docker / compose / git，把仓库克隆到 `~/hr-web`，构建启动，
+等健康检查通过后打印本机与局域网访问地址。**幂等**，重复执行即拉取最新代码并重建。
+
+### 三、不用容器
+
+纯静态站点，任意静态服务器都行：
 
 ```bash
 python -m http.server 8080
@@ -107,27 +147,83 @@ python -m http.server 8080
 
 > `file://` 直接打开 `index.html` 会因 ES Module 的 CORS 限制失败，请用本地服务器。
 
+### 四、域名 + 自动 HTTPS
+
+```bash
+HR_DOMAIN=hr.example.com docker compose -f docker-compose.https.yml up -d
+```
+
+Caddy 自动申领并续期 Let's Encrypt 证书，同时负责 80 → 443 跳转。
+这份编排里 web 服务**不再对外发布端口**，公网只能经 Caddy 访问；
+`depends_on: service_healthy` 保证 Caddy 等 web 通过探活后才启动，避免首请求 502。
+
+### 镜像里做了什么
+
+| 维度 | 做法 |
+| --- | --- |
+| **构建闸门** | 三段式构建：打包 → **跑完整回归测试** → 出运行镜像。测试不过就产不出可用镜像（`--build-arg SKIP_TESTS=1` 是应急开关） |
+| **不以 root 运行** | 基础镜像 `nginxinc/nginx-unprivileged:1.27-alpine`（uid 101）。构建期还会断言 `id -u != 0`，有人换成 root 镜像会直接构建失败 |
+| **配置先校验** | 构建期用 `nginx -t` 解析整份站点配置（包一层最小 `http{}` 外壳）。配置写错在构建时暴露，而不是等运维在服务器上启动才发现 |
+| **离线可用** | 构建期扫描源码，出现会触发外部请求的写法（`src=`/`href=`/`url()`/`@import` 指向 http(s)）就直接失败 |
+| **缓存策略** | `/assets/**` → `max-age=31536000`（素材同名不变）；HTML/JS/CSS → `no-cache`，靠 ETag 走 304 |
+| **压缩** | gzip 只作用于文本类型；webp / woff2 本身已压缩，不重复压 |
+| **安全响应头** | CSP（`connect-src 'none'`、`frame-ancestors 'self'`）、`nosniff`、`X-Frame-Options`、`Referrer-Policy`、`Permissions-Policy`；`server_tokens off` 不回显版本 |
+| **容器加固** | `cap_drop: ALL`、`no-new-privileges`、**根文件系统只读**（nginx 的运行期写入点已全部收敛到 `/tmp`）、`/tmp` 与 `/var/cache/nginx` tmpfs、CPU 1 核 / 内存 128 MB 上限、日志 5 MB × 3 轮转 |
+| **探活** | `/healthz` 返回 `ok`；容器 `HEALTHCHECK` 与 compose `healthcheck` 都用它 |
+| **多架构** | CI 构建 `linux/amd64` + `linux/arm64` |
+| **自动发布** | push 到 main 或打 `v*` tag，GitHub Actions 构建并推送 GHCR 镜像（发布流程本身也是 CI，因为构建内含测试闸门） |
+
+容器内端口固定 **8080**（与 rootless 基础镜像约定一致），对外端口用发布映射调整。
+
+### 直接跑已发布的镜像
+
+```bash
+docker run -d --name hr-web \
+  -p 8080:8080 \
+  --restart unless-stopped \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
+  ghcr.io/lbbit/hr_web:latest
+```
+
 ## 目录结构
 
 ```
 HR_web/
-├── index.html          # 最小外壳：#stage / #modal / #toast / #loader
-├── styles.css          # 像素主题：@font-face Zpix、固定舞台缩放、pixelated 渲染、按钮/键块/进度条
+├── index.html              # 最小外壳：#stage / #modal / #toast / #loader
+├── styles.css              # 像素主题：@font-face Zpix、固定舞台缩放、pixelated 渲染
 ├── src/
-│   ├── main.js         # 启动、舞台缩放、13 个界面的构建与路由、暂停/退出接线
-│   ├── game.js         # 比赛引擎（DOM 渲染）：20 组×6 键、计分、对手、LCD、日志
-│   ├── audio.js        # Web Audio 音频引擎（3 首程序化 BGM + 音效）
-│   ├── storage.js      # localStorage 持久化（账号 / 双榜 / 马厩 / 统计 / 设置）
-│   └── assets.js       # 原作素材清单、路径构造、预加载与图片缓存
+│   ├── main.js             # 启动、舞台缩放、13 个界面的构建与路由、暂停/退出接线
+│   ├── game.js             # 比赛引擎（DOM 渲染）：20 组×6 键、计分、对手、LCD、日志
+│   ├── audio.js            # Web Audio 音频引擎（3 首程序化 BGM + 音效）
+│   ├── storage.js          # localStorage 持久化（账号 / 双榜 / 马厩 / 统计 / 设置）
+│   └── assets.js           # 原作素材清单、路径构造、预加载与图片缓存
 ├── test/
-│   ├── harness.mjs     # 无头回归测试：完整游戏流程（194 项断言）
-│   └── assets.mjs      # 素材完整性 + 可选 HTTP/MIME 校验
-└── assets/             # 314 个无损 WebP，共 0.81 MB
-    ├── bg/             # 16 张界面背景与赛道（原作 BG*.png）
-    ├── ui/             # 140 个按钮 / 标签 / 图标
-    ├── keys/           # 90 个按键图块（方向键 + A–Z，各含正确/错误态）
-    ├── horses/         # 58 张马匹帧（20 匹 × STAND，前 19 匹 × RUN1/RUN2）
-    └── portraits/      # 10 张头像
+│   ├── harness.mjs         # 无头回归测试：完整游戏流程（205 项断言）
+│   └── assets.mjs          # 素材完整性 + 标记引用 + 可选 HTTP/MIME 校验
+├── tools/
+│   └── subset-font.py      # 生成自托管像素字体子集，并逐字形校验与上游一致
+├── deploy/
+│   ├── nginx/
+│   │   ├── default.conf    # 站点配置：缓存 / 压缩 / 安全头 / healthz
+│   │   └── 404.html        # 像素风 404 页（构建时拷到站点根）
+│   ├── Caddyfile           # 自动 HTTPS 反向代理配置
+│   └── quickstart.sh       # 裸机一键部署脚本
+├── Dockerfile              # 三段式：bundle → 回归测试闸门 → rootless nginx
+├── docker-compose.yml      # 一键部署（单服务，含加固与健康检查）
+├── docker-compose.https.yml # 域名 + 自动 HTTPS（web + Caddy）
+├── .dockerignore
+├── Makefile                # make up / logs / down / test / font / https …
+├── .github/workflows/
+│   └── docker.yml          # CI：构建并推送 GHCR（含测试闸门）
+└── assets/                 # 314 个无损 WebP（0.81 MB）+ 字体子集（0.28 MB）
+    ├── bg/                 # 16 张界面背景与赛道（原作 BG*.png）
+    ├── ui/                 # 140 个按钮 / 标签 / 图标（含 favicon.ico）
+    ├── keys/               # 90 个按键图块（方向键 + A–Z，各含正确/错误态）
+    ├── horses/             # 58 张马匹帧（20 匹 × STAND，前 19 匹 × RUN1/RUN2）
+    ├── portraits/          # 10 张头像
+    └── fonts/              # zpix-subset.woff2（由 tools/subset-font.py 生成）
 ```
 
 ## 与原作的对照
@@ -136,7 +232,7 @@ HR_web/
 | --- | --- | --- |
 | 技术栈 | Qt Widgets (C++) | 原生 ES Module + DOM 渲染 + Web Audio |
 | 美术 | 手绘像素 PNG | **同一批**像素图，无损 WebP（体积降至 4%） |
-| 字体 | 像素字烘焙进 PNG | 静态 UI 沿用烘焙图，动态文字用 Zpix 像素字体 |
+| 字体 | 像素字烘焙进 PNG | 静态 UI 沿用烘焙图；动态文字用自托管 Zpix 子集（GB2312 全覆盖，284 KB） |
 | 缩放 | 固定窗口（472×622 / 1020×642） | 固定分辨率舞台 + 等比缩放，任意屏幕自适应 |
 | 音频 | 5 段约 1.1 MB WAV | 程序化合成 3 首 BGM + 音效（零音频文件） |
 | 对手 | 随机三档技能的虚拟对手 | 同一套技能区间与出招公式 |
@@ -144,7 +240,7 @@ HR_web/
 | 排行榜 | `RankC rankE[5]` 固定 5 槽，**不按用户名去重** | 同（忠实还原） |
 | 初始马匹 | 注册即送 3 匹（#0 #1 #2） | 同 |
 | 传说马 | 集齐 #0–#18 后自动解锁 #19 | 同（并修复其跑动帧缺失导致的空白） |
-| 分发 | Inno Setup 安装包 | 静态站点 / 任意托管 |
+| 分发 | Inno Setup 安装包 | 静态站点 / 容器镜像（amd64 + arm64） |
 
 ## 验证
 
@@ -153,16 +249,24 @@ HR_web/
 注册/登录/改名/改密、管理员删号、完整 20 局比赛、暂停/继续/退出、`Esc` 退出、
 排行榜与 20 匹马解锁（含传说马 #19）、音频引擎全部分支、
 以及 314 个素材的磁盘存在性、大小写敏感路径、和可选的 HTTP 200 + MIME 校验。
+`test/assets.mjs` 还会解析 `index.html` / `styles.css` / `404.html` 里的
+`src=` / `href=` / `url()` 引用并逐个核对 —— 字体是从 CSS 与 `<head>` 预加载引入的，
+JS 素材清单看不见它，拼错不会报错、只会白白浪费一次请求，所以这条链路必须单独校验。
 
-测试里带两个**防空转**断言：素材请求数必须 ≥300、且不得出现被吞掉的 `preload error`。
-没有它们，一个缺失的浏览器全局（例如 `Image`）会让整个应用静默空转，而测试依然全绿 ——
-上面那个按键裂图的 bug 就是这么被漏掉、又是这么被揪出来的。
+测试里带三个**防空转**断言：素材请求数必须 ≥300、不得出现被吞掉的 `preload error`、
+标记引用扫描必须至少找到 3 条。没有它们，一个缺失的浏览器全局（例如 `Image`）
+会让整个应用静默空转，而测试依然全绿 —— 那个「按键正确/错误时显示裂图」的 bug
+就是这么被漏掉、又是这么被揪出来的。
+
+字体子集同理：`tools/subset-font.py` 不是只看文件大小，而是把**每个保留字形的轮廓**
+与上游 TTF 逐一比对（7736 个字形，0 差异），并单独报告上游本就没有字形的码位。
+`--check-only` 可以只校验不重建。
 
 ```bash
 # 主回归测试（约 40s，随机数已固定，结果可复现）
 node test/harness.mjs
 
-# 素材完整性（可选：加本地服务器地址则额外校验 HTTP 状态与 MIME）
+# 素材 + 标记引用完整性（可选：加本地服务器地址则额外校验 HTTP 状态与 MIME）
 python -m http.server 8080 &
 node test/assets.mjs http://127.0.0.1:8080
 ```
@@ -171,8 +275,11 @@ node test/assets.mjs http://127.0.0.1:8080
 
 ```
 PASS 205   FAIL 0
-ASSETS OK  (314/314 files, 0.81 MB, 0 orphans, 0 case mismatches)
-HTTP 322/322 -> 200
+ASSETS OK  (316 files on disk, 314/314 in manifest, 0 orphans, 0 case mismatches,
+            0 broken markup refs, 0.81 MB art + 0.28 MB font)
+HTTP 323/323 -> 200
+
+FONT OK    (7736/7736 expected glyphs outline-identical to upstream, 0 dropped)
 ```
 
 ## License

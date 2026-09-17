@@ -8,3 +8,16 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# tools/subset-font.py 下载的上游字体缓存（6.9 MB，可随时重新下载）
+.cache/
+
+# 测试脚本的临时输出
+out.txt
+test_out.txt
+urls*.txt
+httpres*.txt
+
+# python
+__pycache__/
+*.pyc

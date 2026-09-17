@@ -1,0 +1,38 @@
+# =============================================================================
+#  Caddyfile —— 自动 HTTPS 反向代理（配合 docker-compose.https.yml）
+#
+#  用 {$VAR} 引用环境变量，由 compose 注入。
+#  HR_DOMAIN 必填（compose 里用 ${HR_DOMAIN:?...} 做了强制校验）。
+#  Caddy 会自动申请/续期 Let's Encrypt 证书，无需手工配置任何证书路径。
+# =============================================================================
+
+# 全局选项块：acme_ca 是**全局**指令，写进站点块会导致启动失败。
+# 默认走 Let's Encrypt 生产环境；灰度验证时可指向：
+#   https://acme-staging-v02.api.letsencrypt.org/directory
+{
+	acme_ca {$ACME_CA}
+}
+
+{$HR_DOMAIN} {
+	# 压缩。webp / woff2 已是压缩格式，Caddy 不会对它们重复编码。
+	encode zstd gzip
+
+	# 反向代理到容器内的 web:8080。
+	# health_uri 让 Caddy 只把流量发给通过探活的实例，探活失败自动摘除。
+	reverse_proxy web:8080 {
+		health_uri /healthz
+		health_interval 30s
+		health_timeout 3s
+	}
+
+	# nginx 已关闭 server_tokens，这里再抹掉 Caddy 自己的版本标识
+	header {
+		-Server
+	}
+
+	# access log 进容器 stdout，docker compose logs 直接可查
+	log {
+		output stdout
+		format console
+	}
+}
