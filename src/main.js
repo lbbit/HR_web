@@ -232,19 +232,25 @@ function buildRegister() {
   const code = pinput(s, { x: 160, y: 340, w: 150, h: 25, placeholder: '至少 4 位', password: true });
   const code2 = pinput(s, { x: 160, y: 390, w: 150, h: 25, placeholder: '再次输入', password: true });
   const msg = ptext(s, { x: 90, y: 262, w: 330, h: 22, cls: 'sm', align: 'center', color: '#b00' });
+  // 注册成功的瞬间会 go('menu')；若同一次交互里再迟到一次 click 事件（合成点击 /
+  // 转发的激活事件等），绝不能让它把“该用户名已被占用”重新刷到界面上——
+  // 那会让用户看到“报错已注册，实际却注册成功了”的自相矛盾
+  let submitted = false;
   pbtn(s, { base: 'CHECK', x: 330, y: 290, w: 45, h: 24, label: '检测用户名', onClick: () => {
     if (!name.value.trim()) { msg.textContent = '请输入用户名'; msg.style.color = '#b00'; return; }
     if (store.nameTaken(name.value)) { msg.textContent = '该用户名已被占用'; msg.style.color = '#b00'; audio.wrong(); }
     else { msg.textContent = '用户名可用'; msg.style.color = '#070'; audio.correct(); }
   } });
   pbtn(s, { base: 'CHECKCONFIRM', x: 135, y: 440, w: 180, h: 70, label: '注册', onClick: () => {
+    if (submitted) return;
     if (code.value !== code2.value) { msg.textContent = '两次密码不一致'; msg.style.color = '#b00'; audio.wrong(); return; }
     const r = store.register(name.value, code.value);
     if (!r.ok) { msg.textContent = r.msg; msg.style.color = '#b00'; audio.wrong(); return; }
+    submitted = true;
     go('menu');
   } });
   pbtn(s, { base: 'RETURN', x: 30, y: 530, w: 80, h: 40, label: '返回', onClick: () => go('login') });
-  onEnter.register = () => { name.value = ''; code.value = ''; code2.value = ''; msg.textContent = ''; name.focus(); };
+  onEnter.register = () => { submitted = false; name.value = ''; code.value = ''; code2.value = ''; msg.textContent = ''; name.focus(); };
 }
 
 // ---- MENU (BG3) ----

@@ -463,6 +463,32 @@ clickBtn('register', '注册');
 ok(activeScreen() === 'menu', `register ${USER} -> menu (got ${activeScreen()})`);
 ok(saved().currentUser === USER, `register sets currentUser=${USER}`);
 ok(saved().users[USER].games === 0, 'fresh account has 0 games');
+
+section('REGISTER — late 2nd click must not repaint 已被占用 after success');
+// 报告过的缺陷：注册成功（已 go('menu')）后，同一次交互里再迟到一次 click 事件，
+// 会把“该用户名已被占用”刷上屏 —— 用户看到报错，账号却已建好
+const regMsg = descendants(screenEl('register')).find((e) => e._cls.has('ptext'));
+const msgBefore = regMsg.textContent;
+clickBtn('register', '注册');                    // 迟到的第二次事件（不重走 onEnter）
+ok(activeScreen() === 'menu', 'late 2nd click keeps the app on menu');
+ok(regMsg.textContent === msgBefore,
+   `late 2nd click does not repaint the error (msg="${regMsg.textContent}")`);
+ok(Object.keys(saved().users).filter((n) => n === USER).length === 1,
+   'the account exists exactly once');
+
+section('REGISTER — usernames colliding with Object.prototype keys');
+// users 曾是普通对象：register("constructor") 会命中继承键而误报“已被占用”。
+// users 现为无原型映射，这些名字都是合法用户名。
+const store2 = await import(importUrl('src/storage.js'));
+for (const nm of ['constructor', 'toString', '__proto__']) {
+  ok(store2.nameTaken(nm) === false, `nameTaken("${nm}") is false (no inherited-key false positive)`);
+  ok(store2.register(nm, '1234').ok === true, `register("${nm}") succeeds`);
+  ok(!!saved().users[nm], `"${nm}" persisted as a real account`);
+  ok(store2.login(nm, '1234').ok === true, `login("${nm}") works`);
+  store2.deleteUser(nm);
+  ok(store2.current() === null, `deleteUser("${nm}") cleared the session`);
+}
+
 clickBtn('menu', '退出');
 clickDialog('切换用户');
 ok(activeScreen() === 'login', 'menu QUIT -> 切换用户 -> login');

@@ -6,7 +6,9 @@ const KEY = 'hrweb_save_v2';
 
 function defaultState() {
   return {
-    users: {},          // name -> user
+    // 无原型映射：用户名可以叫 constructor / toString / __proto__ 而不被
+    // Object.prototype 上的继承键误判成“该用户名已被占用”
+    users: Object.create(null),         // name -> user
     currentUser: null,
     // the original declares `RankC rankE[5]` as a fixed 5-slot table
     // (default UserName="---", Score=0); null == an empty slot
@@ -56,6 +58,10 @@ function load() {
     const s = JSON.parse(raw);
     const d = defaultState();
     const merged = Object.assign(d, s);
+    // 旧存档里的 users 是普通对象（带 Object.prototype），统一重建为无原型映射，
+    // 否则 users['constructor'] 这类读取会命中继承键
+    merged.users = Object.assign(Object.create(null),
+      (s.users && typeof s.users === 'object' && !Array.isArray(s.users)) ? s.users : {});
     merged.settings = Object.assign(d.settings, s.settings || {});
     merged.rankE = normalizeRank(merged.rankE);
     merged.rankH = normalizeRank(merged.rankH);
