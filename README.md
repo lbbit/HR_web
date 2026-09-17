@@ -216,16 +216,6 @@ python -m http.server 8080
 
 > `file://` 直接打开 `index.html` 会因 ES Module 的 CORS 限制失败，请用本地服务器。
 
-### 四、域名 + 自动 HTTPS
-
-```bash
-HR_DOMAIN=hr.example.com docker compose -f docker-compose.https.yml up -d
-```
-
-Caddy 自动申领并续期 Let's Encrypt 证书，同时负责 80 → 443 跳转。
-这份编排里 web 服务**不再对外发布端口**，公网只能经 Caddy 访问；
-`depends_on: service_healthy` 保证 Caddy 等 web 通过探活后才启动，避免首请求 502。
-
 ### 镜像里做了什么
 
 | 维度 | 做法 |
@@ -311,13 +301,11 @@ HR_web/
 │   ├── nginx/
 │   │   ├── default.conf    # 站点配置：缓存 / 压缩 / 安全头 / healthz
 │   │   └── 404.html        # 像素风 404 页（构建时拷到站点根）
-│   ├── Caddyfile           # 自动 HTTPS 反向代理配置
 │   └── quickstart.sh       # 裸机一键部署脚本
 ├── Dockerfile              # 三段式：bundle → 回归测试闸门 → rootless nginx
 ├── docker-compose.yml      # 一键部署（单服务，含加固与健康检查）
-├── docker-compose.https.yml # 域名 + 自动 HTTPS（web + Caddy）
 ├── .dockerignore
-├── Makefile                # make up / logs / down / test / font / https …
+├── Makefile                # make up / logs / down / test / font …
 ├── .github/workflows/
 │   └── docker.yml          # CI：构建并推送 GHCR（含测试闸门）
 └── assets/                 # 314 个无损 WebP（0.81 MB）+ 字体子集（0.28 MB）

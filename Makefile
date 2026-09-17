@@ -16,7 +16,7 @@ PY    ?= python
 COMPOSE ?= docker compose
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart logs ps sh health test assets gate font shots shots-probe run build https prod clean nuke
+.PHONY: help up down restart logs ps sh health test assets gate font shots shots-probe run build prod clean nuke
 
 help: ## 显示所有可用目标
 	@echo "魔幻赛马 / Horse Racing —— 可用目标"
@@ -76,9 +76,6 @@ shots-probe: ## 只跑界面 DOM 体检（裂图 / 越界 / 保真不变量）�
 # ------------------------------------------------------------------ 运行与发布
 run: ## 不构建，直接跑已有镜像（前台）
 	docker run --rm -p $(PORT):8080 $(IMAGE)
-
-https: ## 域名 + 自动 HTTPS 部署（需先设置 HR_DOMAIN）
-	$(COMPOSE) -f docker-compose.https.yml up -d --build
 
 prod: ## 拉取已发布镜像并启动，不在本机构建
 	$(COMPOSE) pull

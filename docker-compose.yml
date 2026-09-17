@@ -11,8 +11,6 @@
 #    HR_WEB_IMAGE       镜像名/tag，默认 hr-web:latest
 #    SKIP_TESTS=1       跳过镜像内的回归测试（应急用，正常不要开）
 #    TZ                 容器时区，只影响日志时间戳
-#
-#  需要域名 + 自动 HTTPS：改用 docker-compose.https.yml
 # =============================================================================
 
 name: hr-web
