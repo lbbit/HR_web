@@ -403,7 +403,8 @@ function buildRank() {
       sc.textContent = r ? r.score : '0';
     });
   }
-  onEnter.rank = paint;
+  // 远程模式：进入排行页时先画镜像，再拉服务端权威数据重画（多人共享的关键视图）
+  onEnter.rank = () => { paint(); store.refreshRanking().then(paint).catch(() => {}); };
 }
 
 // ---- RULE (BG6) ----
@@ -431,9 +432,8 @@ function buildUserCenter() {
   const paintPortrait = (d) => {
     const u = store.current();
     if (!u) { go('title'); return; }
-    u.Port = (u.Port + 10 + d) % 10;
+    store.setPortrait(d); // 本地即时生效 + 远程模式异步写服务端
     photo.src = assets.portrait(u.Port);
-    store.persist(); // persist the chosen avatar
     audio.click();
   };
   pbtn(s, { src: assets.ui('LASTINDEX_LEFT_W'), x: 70, y: 190, w: 30, h: 30, label: '上一头像', onClick: () => paintPortrait(-1) });
@@ -690,7 +690,9 @@ function build() {
   buildTitle(); buildLogin(); buildRegister(); buildMenu(); buildSelect();
   buildRank(); buildRule(); buildUserCenter(); buildChangeName(); buildChangeCode();
   buildAdmin(); buildGameOver(); buildRace();
-  if (!store.allUsers().length) {
+  // 演示账号种子只属于本地（离线）模式；远程模式下由服务端在空库时自行种子，
+  // 避免双写竞争（见 docs/backend-design.md §7）
+  if (!store.remoteActive() && !store.allUsers().length) {
     store.register('admin', 'admin');
     store.current().isAdmin = true;
     store.register('lbb', '1234');
@@ -703,6 +705,8 @@ async function boot() {
   const fill = $('loader-fill');
   const txt = $('loader-text');
   build();
+  // 远程模式：重放离线战果 + 恢复会话（带内部超时，后端不可达也不阻塞开机）
+  await store.restoreSession().catch(() => {});
   try { await assets.preload((p) => { fill.style.width = Math.round(p * 100) + '%'; }); }
   catch (e) { console.warn('preload error', e); }
   txt.textContent = '就绪';

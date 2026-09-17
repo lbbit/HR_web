@@ -57,6 +57,7 @@ health: ## 打一次健康检查接口
 test: ## 跑无头回归测试（需要 node ≥ 20）
 	node test/assets.mjs
 	node test/harness.mjs
+	node test/api.mjs
 
 assets: ## 只校验素材完整性（磁盘存在性 / 大小写 / 孤儿文件）
 	node test/assets.mjs

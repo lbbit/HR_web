@@ -169,7 +169,11 @@ LCD 底色、以及 11 个 HUD 控件是否落在原作 `.ui` 坐标上。
   \+ 动态音效（按键对错、倒计时、马蹄、胜负、解锁），零音频文件，取代原作约 1.1 MB 的 WAV。
 - **完整进度系统**：注册/登录、改名改密、简单/困难双榜（Top 5）、20 匹马收集、
   累计局数/时长/路程、最高分与最高排名、管理员用户管理。
-- **本地存档**：`localStorage`（键 `hrweb_save_v2`），无需后端。
+- **本地存档**：`localStorage`（键 `hrweb_save_v2`），无需后端；断网 / 内网照常可玩。
+- **可选多人共享**：起 `api/` 服务（零依赖 Node，随 compose 一键带上）后账号、
+  马厩、战绩与双榜全服共享——服务端权威结算（防伪造战绩/解锁）、令牌鉴权、
+  幂等去重、原子落盘；后端不可达时自动回退本地模式，玩法零差异。
+  设计与取舍见 `docs/backend-design.md`。
 - **一条命令容器化部署**：多阶段构建（**回归测试作为构建闸门**）、rootless nginx、
   只读根文件系统、`/healthz` 健康检查、多架构镜像、CI 自动发布到 GHCR。
 - 首次打开会自动预置演示账号：`admin / admin`（管理员）与 `lbb / 1234`。
@@ -195,6 +199,11 @@ docker compose up -d --build
 
 换个对外端口：`HR_WEB_PORT=8081 docker compose up -d`
 装了 `make` 的话更省事：`make up` / `make logs` / `make ps` / `make down`（`make help` 看全部）。
+
+编排里是 **web + api 两个服务**：`api` 提供共享账号 / 排行榜（数据落 `hr_api_data`
+卷），由 web 的 nginx 在同源 `/api/` 路径反代，不直接对外发布端口。
+`api` 停掉或不可达时站点照常可玩——前端探测失败自动进入离线本地模式；
+再次可达时离线期间打完的局会自动补报（服务端按 seq 去重，不会重复计分）。
 
 ### 二、服务器裸机一键脚本
 
@@ -282,11 +291,15 @@ HR_web/
 │   ├── main.js             # 启动、舞台缩放、13 个界面的构建与路由、暂停/退出接线
 │   ├── game.js             # 比赛引擎（DOM 渲染）：20 组×6 键、计分、对手、LCD、日志
 │   ├── audio.js            # Web Audio 音频引擎（3 首程序化 BGM + 音效）
-│   ├── storage.js          # localStorage 持久化（账号 / 双榜 / 马厩 / 统计 / 设置）
+│   ├── storage.js          # 双模式持久化：离线 localStorage / 在线远程共享（同步 API 不变）
 │   └── assets.js           # 原作素材清单、路径构造、预加载与图片缓存
+├── api/
+│   ├── server.mjs          # 共享数据后端：零依赖 Node，服务端权威结算 + HMAC 令牌 + 原子落盘
+│   └── Dockerfile          # node:22-alpine，非 root，/data 数据卷，/healthz 探活
 ├── test/
-│   ├── harness.mjs         # 无头回归测试：完整游戏流程（217 项断言）
-│   └── assets.mjs          # 素材完整性 + 标记引用 + 可选 HTTP/MIME 校验
+│   ├── harness.mjs         # 无头回归测试：完整游戏流程（235 项断言）
+│   ├── assets.mjs          # 素材完整性 + 标记引用 + 可选 HTTP/MIME 校验
+│   └── api.mjs             # 后端集成测试：注册/登录/结算/排行/幂等/并发/持久化/限流
 ├── tools/
 │   ├── subset-font.py      # 生成自托管像素字体子集，并逐字形校验与上游一致
 │   ├── gate-sim.mjs        # 不用 docker 本地复现镜像的构建闸门（照 Dockerfile 的 COPY 铺目录）
@@ -296,18 +309,19 @@ HR_web/
 │       ├── shot.mjs        # 浏览器内驱动：播种存档 → 真实点击/按键 → 锁定整数缩放
 │       └── capture.mjs     # Node 侧：临时服务器 + CDP 实时驱动 + 逐张校验
 ├── docs/
+│   ├── backend-design.md   # 多人共享后端的设计文档（架构 / API 契约 / 并发与降级）
 │   └── screenshots/        # README 用的 13 张界面截图（由 tools/shots 生成）
 ├── deploy/
 │   ├── nginx/
-│   │   ├── default.conf    # 站点配置：缓存 / 压缩 / 安全头 / healthz
+│   │   ├── default.conf    # 站点配置：缓存 / 压缩 / 安全头 / healthz / /api 反代
 │   │   └── 404.html        # 像素风 404 页（构建时拷到站点根）
 │   └── quickstart.sh       # 裸机一键部署脚本
 ├── Dockerfile              # 三段式：bundle → 回归测试闸门 → rootless nginx
-├── docker-compose.yml      # 一键部署（单服务，含加固与健康检查）
+├── docker-compose.yml      # 一键部署（web + api 两服务，均含加固与健康检查）
 ├── .dockerignore
 ├── Makefile                # make up / logs / down / test / font …
 ├── .github/workflows/
-│   └── docker.yml          # CI：构建并推送 GHCR（含测试闸门）
+│   └── docker.yml          # CI：构建并推送 web + api 镜像到 GHCR（含测试闸门）
 └── assets/                 # 314 个无损 WebP（0.81 MB）+ 字体子集（0.28 MB）
     ├── bg/                 # 16 张界面背景与赛道（原作 BG*.png）
     ├── ui/                 # 140 个按钮 / 标签 / 图标（含 favicon.ico）
