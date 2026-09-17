@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>魔幻赛马 · Horse Racing Web</title>
+  <link rel="icon" href="./assets/ui/favicon.ico" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Loading overlay -->
+    <div id="loader" class="loader">
+      <div class="loader-logo">🐎</div>
+      <div class="loader-title">魔幻赛马</div>
+      <div class="loader-bar"><div id="loader-fill"></div></div>
+      <div id="loader-text" class="loader-text">加载资源中…</div>
+    </div>
+
+    <!-- Title / Boot -->
+    <section class="screen" id="screen-title">
+      <div class="title-bg"></div>
+      <div class="title-inner">
+        <img class="title-logo" src="./assets/ui/logo.png" alt="logo" />
+        <h1 class="title-name">魔幻赛马 <span>HORSE RACING</span></h1>
+        <p class="title-sub">键盘节奏竞速 · 复刻重制版</p>
+        <div class="title-buttons">
+          <button class="btn btn-primary" data-go="login">开始游戏</button>
+          <button class="btn btn-ghost" data-go="about">关于 / About</button>
+        </div>
+        <div class="title-music">
+          <button id="title-music" class="chip" title="背景音乐">♪ 音乐：开</button>
+          <span class="title-hint">原作：lbbit/HR · 本作复刻自原 Qt 工程</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Login -->
+    <section class="screen" id="screen-login">
+      <div class="panel">
+        <h2>登录</h2>
+        <input id="login-name" class="field" type="text" placeholder="用户名" autocomplete="username" />
+        <input id="login-code" class="field" type="password" placeholder="密码" autocomplete="current-password" />
+        <div id="login-msg" class="msg"></div>
+        <button id="login-btn" class="btn btn-primary">登录</button>
+        <div class="panel-foot">还没有账号？<a data-go="register">立即注册</a></div>
+        <button class="link-back" data-go="title">‹ 返回</button>
+      </div>
+    </section>
+
+    <!-- Register -->
+    <section class="screen" id="screen-register">
+      <div class="panel">
+        <h2>注册</h2>
+        <input id="reg-name" class="field" type="text" placeholder="用户名（≥2 字）" />
+        <input id="reg-code" class="field" type="password" placeholder="密码（≥4 位）" />
+        <input id="reg-code2" class="field" type="password" placeholder="确认密码" />
+        <div id="reg-msg" class="msg"></div>
+        <button id="reg-btn" class="btn btn-primary">创建账号</button>
+        <div class="panel-foot">已有账号？<a data-go="login">去登录</a></div>
+        <button class="link-back" data-go="title">‹ 返回</button>
+      </div>
+    </section>
+
+    <!-- Main Menu -->
+    <section class="screen" id="screen-menu">
+      <div class="menu-bg"></div>
+      <div class="menu-inner">
+        <div class="menu-head">
+          <img id="menu-portrait" class="avatar" src="./assets/portraits/PORTRAIT0.png" alt="avatar" />
+          <div>
+            <div id="menu-user" class="menu-user">玩家</div>
+            <div id="menu-level" class="menu-level">等级 1 · 经验 0</div>
+          </div>
+          <div class="menu-stats">
+            <div><span id="menu-tope">0</span><small>简单最高</small></div>
+            <div><span id="menu-toph">0</span><small>困难最高</small></div>
+            <div><span id="menu-horses">1/20</span><small>马厩</small></div>
+          </div>
+        </div>
+        <div class="menu-grid">
+          <button class="menu-card card-accent" data-go="select">🏁<span>开始比赛</span></button>
+          <button class="menu-card" data-go="ranking">🏆<span>排行榜</span></button>
+          <button class="menu-card" data-go="collection">🐎<span>我的马厩</span></button>
+          <button class="menu-card" data-go="rule">📖<span>游戏规则</span></button>
+          <button class="menu-card" data-go="settings">⚙️<span>设置</span></button>
+          <button class="menu-card" data-go="about">ℹ️<span>关于</span></button>
+        </div>
+        <button id="menu-logout" class="btn btn-ghost btn-sm">切换账号</button>
+      </div>
+    </section>
+
+    <!-- Select (game prep) -->
+    <section class="screen" id="screen-select">
+      <div class="select-inner">
+        <h2>比赛准备</h2>
+        <div class="select-row">
+          <div class="select-label">难度</div>
+          <div class="seg" id="seg-diff">
+            <button class="seg-btn active" data-diff="easy">简单（方向键）</button>
+            <button class="seg-btn" data-diff="hard">困难（字母 A–Z）</button>
+          </div>
+        </div>
+        <div class="select-row">
+          <div class="select-label">对手</div>
+          <div class="rival-box">
+            <button id="rival-prev" class="round-btn">‹</button>
+            <div class="rival-info">
+              <img id="rival-portrait" class="avatar sm" src="./assets/portraits/PORTRAIT1.png" alt="" />
+              <div>
+                <div id="rival-name" class="rival-name">闪电</div>
+                <div id="rival-tier" class="rival-tier">新秀</div>
+              </div>
+            </div>
+            <button id="rival-next" class="round-btn">›</button>
+          </div>
+          <div class="seg seg-tier" id="seg-tier">
+            <button class="seg-btn active" data-tier="0">新秀</button>
+            <button class="seg-btn" data-tier="1">职业</button>
+            <button class="seg-btn" data-tier="2">传奇</button>
+          </div>
+        </div>
+        <div class="select-row">
+          <div class="select-label">出战马</div>
+          <div class="horse-pick">
+            <button id="horse-prev" class="round-btn">‹</button>
+            <img id="horse-pick-img" class="horse-pick-img" src="./assets/horses/HORSE0_STAND_120_90.png" alt="" />
+            <div class="horse-pick-meta">
+              <div id="horse-pick-name" class="horse-pick-name">骏马 #0</div>
+              <div id="horse-pick-tag" class="horse-pick-tag">已解锁</div>
+            </div>
+            <button id="horse-next" class="round-btn">›</button>
+          </div>
+        </div>
+        <div class="select-actions">
+          <button id="select-start" class="btn btn-primary">进入赛道</button>
+          <button class="btn btn-ghost" data-go="menu">‹ 返回菜单</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Race -->
+    <section class="screen" id="screen-race">
+      <div class="race-wrap">
+        <canvas id="race-canvas"></canvas>
+        <div class="race-hud">
+          <div class="hud-top">
+            <div class="hud-side hud-player">
+              <span id="r-player-name" class="hud-name">玩家</span>
+              <b id="r-player-score" class="hud-score">0</b>
+            </div>
+            <div class="hud-center">
+              <div id="r-round" class="hud-round">第 1 / 20 组</div>
+              <div id="r-timer" class="hud-timer">3</div>
+            </div>
+            <div class="hud-side hud-rival">
+              <b id="r-rival-score" class="hud-score">0</b>
+              <span id="r-rival-name" class="hud-name">对手</span>
+            </div>
+          </div>
+          <div class="hud-progress"><div id="r-progress-bar"></div></div>
+          <div class="hud-keys">
+            <img class="key-tile" id="key0" alt="" />
+            <img class="key-tile" id="key1" alt="" />
+            <img class="key-tile" id="key2" alt="" />
+            <img class="key-tile" id="key3" alt="" />
+            <img class="key-tile" id="key4" alt="" />
+            <img class="key-tile" id="key5" alt="" />
+          </div>
+          <div id="r-eval" class="hud-eval"></div>
+          <div class="hud-controls">
+            <button id="r-pause" class="chip">暂停 (空格)</button>
+            <button id="r-music" class="chip">♪</button>
+          </div>
+          <div id="r-countdown" class="countdown"></div>
+          <div id="r-pause-overlay" class="pause-overlay hidden">已暂停<br /><small>按空格继续</small></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Result -->
+    <section class="screen" id="screen-result">
+      <div class="result-inner">
+        <h2 id="result-title">胜利！</h2>
+        <div class="result-score">
+          <div class="rs-col">
+            <span class="rs-name" id="res-player-name">玩家</span>
+            <b id="res-player-score">0</b>
+          </div>
+          <div class="rs-vs">VS</div>
+          <div class="rs-col">
+            <span class="rs-name" id="res-rival-name">对手</span>
+            <b id="res-rival-score">0</b>
+          </div>
+        </div>
+        <div id="result-tags" class="result-tags"></div>
+        <div class="result-actions">
+          <button id="result-again" class="btn btn-primary">再来一局</button>
+          <button class="btn btn-ghost" data-go="menu">返回菜单</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ranking -->
+    <section class="screen" id="screen-ranking">
+      <div class="board-inner">
+        <h2>排行榜</h2>
+        <div class="board-cols">
+          <div class="board-col">
+            <h3>简单模式</h3>
+            <ol id="rank-easy" class="board-list"></ol>
+          </div>
+          <div class="board-col">
+            <h3>困难模式</h3>
+            <ol id="rank-hard" class="board-list"></ol>
+          </div>
+        </div>
+        <button class="btn btn-ghost" data-go="menu">‹ 返回菜单</button>
+      </div>
+    </section>
+
+    <!-- Collection -->
+    <section class="screen" id="screen-collection">
+      <div class="coll-inner">
+        <h2>我的马厩 <span id="coll-count" class="muted">1 / 20</span></h2>
+        <div id="coll-grid" class="coll-grid"></div>
+        <button class="btn btn-ghost" data-go="menu">‹ 返回菜单</button>
+      </div>
+    </section>
+
+    <!-- Rule -->
+    <section class="screen" id="screen-rule">
+      <div class="text-inner">
+        <h2>游戏规则</h2>
+        <ul class="rule-list">
+          <li>每局共 <b>20 组</b> 按键，每组限时 <b>2 秒</b>，开局有 3 秒倒计时。</li>
+          <li><b>简单模式</b>：按屏幕提示依次按下 <b>↑ ↓ ← →</b> 方向键。</li>
+          <li><b>困难模式</b>：按提示依次敲出 <b>A–Z</b> 字母键，组合更丰富。</li>
+          <li>按键越准、越快，得分越高。单组得分 = <code>(80·t² − 400·t + 680) × 正确数 / 6</code>（t 为该组用时）。</li>
+          <li>得分转化为赛马前进距离，<b>总分高于对手即获胜</b>。</li>
+          <li>每局结算后有机会 <b>解锁新马</b>，集齐 20 匹达成传说成就。</li>
+          <li>空格键可随时 <b>暂停 / 继续</b>。背景音乐与音效可在设置中开关。</li>
+        </ul>
+        <button class="btn btn-ghost" data-go="menu">‹ 返回菜单</button>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="screen" id="screen-settings">
+      <div class="text-inner">
+        <h2>设置</h2>
+        <div class="set-row">
+          <span>背景音乐</span>
+          <button id="set-music" class="switch on">开</button>
+        </div>
+        <div class="set-row">
+          <span>曲目</span>
+          <div class="seg" id="seg-track"></div>
+        </div>
+        <div class="set-row">
+          <span>音效</span>
+          <button id="set-sfx" class="switch on">开</button>
+        </div>
+        <hr />
+        <div class="set-row">
+          <span class="danger">清空本机全部存档</span>
+          <button id="set-reset" class="btn btn-danger btn-sm">重置数据</button>
+        </div>
+        <button class="btn btn-ghost" data-go="menu">‹ 返回菜单</button>
+      </div>
+    </section>
+
+    <!-- About -->
+    <section class="screen" id="screen-about">
+      <div class="text-inner">
+        <h2>关于</h2>
+        <p>本作是 <b>魔幻赛马（HorseRacing）</b> 的现代 Web 复刻版。</p>
+        <p>原作是基于 <b>Qt Widgets</b> 的桌面单机游戏（作者大学时期作品），含登录注册、赛马玩法、排行榜、抽奖成长等。</p>
+        <p>复刻版采用 <b>HTML5 Canvas + Web Audio + 原生 ES Module</b> 重写：更流畅的 60fps 动画、粒子特效、程序化生成的现代背景音乐与音效（替换原音频），并用原工程的马匹精灵、赛道背景与按键素材。</p>
+        <p class="muted">原仓库：github.com/lbbit/HR　·　复刻仓库：github.com/lbbit/HR_web</p>
+        <button class="btn btn-ghost" data-go="title">‹ 返回</button>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
