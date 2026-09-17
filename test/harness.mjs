@@ -203,6 +203,26 @@ class FakeBuffer {
   getChannelData() { return this._d; }
 }
 class FakeBufferSource extends FakeNode { constructor() { super(); this.buffer = null; this.loop = false; } }
+
+// A mock `Image`. assets.js preload() does `new Image()`, so without this global
+// the whole preload throws, is swallowed by main.js's try/catch, and the suite
+// would still report green while nothing had actually loaded.
+class FakeImage {
+  constructor() {
+    this.onload = null; this.onerror = null;
+    this.alt = ''; this.decoding = ''; this.complete = false;
+    this.naturalWidth = 0; this.naturalHeight = 0;
+    this._src = '';
+  }
+  get src() { return this._src; }
+  set src(v) { this._src = String(v); probeAsset(this._src, this); }
+  get width() { return this._w || this.naturalWidth; }
+  set width(v) { this._w = v; }
+  get height() { return this._h || this.naturalHeight; }
+  set height(v) { this._h = v; }
+  addEventListener() { } removeEventListener() { }
+  decode() { return Promise.resolve(); }
+}
 const audioStats = { ctxCreated: 0, osc: 0, gain: 0, buffer: 0, filter: 0, src: 0 };
 class FakeCtx {
   constructor() {
@@ -230,6 +250,7 @@ globalThis.innerHeight = 900;
 globalThis.addEventListener = (t, f) => globalListeners.add(t, f);
 globalThis.removeEventListener = (t, f) => globalListeners.remove(t, f);
 globalThis.AudioContext = FakeCtx;
+globalThis.Image = FakeImage;
 globalThis.performance = { now: () => fakeNow };
 globalThis.requestAnimationFrame = (cb) => { const id = ++rafSeq; rafMap.set(id, cb); return id; };
 globalThis.cancelAnimationFrame = (id) => { rafMap.delete(id); };
@@ -368,9 +389,25 @@ for (const n of ['login', 'register', 'menu', 'select', 'rank', 'rule', 'usercen
 ok(globalListeners.count('keydown') >= 2, 'global keydown listeners wired');
 
 section('ASSET RESOLUTION (every requested URL must exist on disk)');
+const assetsMod = await import(importUrl('src/assets.js'));
 info(`distinct asset URLs requested by built screens: ${requestedAssets.size}`);
 ok(missingAssets.size === 0, `all referenced asset URLs exist on disk (${missingAssets.size} missing)`);
 for (const m of [...missingAssets].slice(0, 25)) info('MISSING ' + m);
+// key-state URLs: the original files are `<key>.png`, `<key>_G.png`, `<key>_R.png`
+ok(/keys\/UP\.webp$/.test(assetsMod.keyImage('easy', 0, '')), 'keyImage: no-state -> UP.webp');
+ok(/keys\/UP_G\.webp$/.test(assetsMod.keyImage('easy', 0, 'G')), 'keyImage: correct -> UP_G.webp');
+ok(/keys\/UP_R\.webp$/.test(assetsMod.keyImage('easy', 0, 'R')), 'keyImage: wrong -> UP_R.webp');
+ok(/keys\/a_G\.webp$/.test(assetsMod.keyImage('hard', 0, 'G')), 'keyImage: hard-mode letter state');
+ok(/keys\/a_G\.webp$/.test(assetsMod.keyImage('hard', 0, '_G')), 'keyImage: underscore-prefixed state normalises');
+for (const st of ['', 'G', 'R']) {
+  for (const [mode, n] of [['easy', 4], ['hard', 26]]) {
+    for (let v = 0; v < n; v++) {
+      const p = assetsMod.keyImage(mode, v, st).replace(/^\.\//, '');
+      if (!fs.existsSync(path.join(ROOT, p))) { missingAssets.add(p); }
+    }
+  }
+}
+ok(missingAssets.size === 0, 'every easy/hard key tile exists in all 3 states');
 
 section('AUDIO — BGM scheduler (snare / hat / noise buffer)');
 const audioMod = await import(importUrl('src/audio.js'));
@@ -606,6 +643,10 @@ const lcd = descendants(screenEl('race')).find((e) => e._cls.has('lcd'));
 ok(String(lcd.textContent).length > 0, `LCD shows a countdown value (${lcd.textContent})`);
 const keyImgs = keyTiles.map((t) => t.children[0]);
 ok(keyImgs.every((i) => !!i && !!i._src), 'all 6 key tiles have an image assigned');
+ok(/keys\/(UP|DOWN|LEFT|RIGHT)_[GR]\.webp$/.test(keyImgs[0]._src),
+   `pressed key tile shows its green/red state art (${keyImgs[0]._src})`);
+ok(keyTiles[0]._cls.has('done') || keyTiles[0]._cls.has('miss'),
+   'pressed key tile carries the done/miss class');
 
 section('RACE — first key-group completes (_endGroup regression)');
 const byPos = (x, y) => descendants(screenEl('race'))
@@ -762,7 +803,6 @@ clickBtn('gameover', '返回');
 ok(activeScreen() === 'menu', 'back at menu');
 
 section('RACE with the legendary horse #19 (no RUN art in the original)');
-const assetsMod = await import(importUrl('src/assets.js'));
 ok(assetsMod.horseFrame(19, 'RUN1') === assetsMod.horseFrame(19, 'STAND'),
    'horse #19 RUN1 falls back to STAND (no such art exists)');
 ok(/HORSE18_RUN1/.test(assetsMod.horseFrame(18, 'RUN1')), 'horse #18 keeps its real RUN1 frame');
@@ -820,6 +860,13 @@ ok(parsed.users[USER].games > 0, 'saved blob carries play stats');
 
 // ---------------------------------------------------------------- report
 section('RESULT');
+// ANTI-VACUITY GUARD: a green suite is worthless if the app never really ran.
+ok(requestedAssets.size >= 300, `app preloaded its asset set through the mock (${requestedAssets.size} URLs)`);
+ok(missingAssets.size === 0, 'no asset URL failed to load');
+// A swallowed "preload error" is the signature of a missing browser global.
+const preloadErrors = warns.filter((w) => /preload error/.test(w));
+ok(preloadErrors.length === 0, `no swallowed preload errors (${preloadErrors.length})`);
+for (const m of [...missingAssets].slice(0, 20)) info('MISSING ASSET ' + m);
 const warnsFiltered = warns.filter((w) => !/preload error/.test(w));
 ok(warnsFiltered.length === 0, `no unexpected console.warn (${warnsFiltered.length})`);
 ok(errors.length === 0, `no exceptions / rejections (${errors.length})`);

@@ -29,9 +29,16 @@ export function horseFrame(i, frame = 'STAND') {
 export const portrait = (i) => `${A}portraits/PORTRAIT${i}.webp`;
 
 const EASY_KEYS = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+/**
+ * Key-tile art. The original files are `<key>.png`, `<key>_G.png`, `<key>_R.png`
+ * (green = correct, red = wrong) — i.e. the state is separated by an UNDERSCORE.
+ * Normalise the state here so callers may pass '', 'G', or '_G' interchangeably;
+ * omitting the underscore silently 404s every correct/wrong indicator.
+ */
 export function keyImage(mode, value, state = '') {
   const ch = mode === 'easy' ? EASY_KEYS[value] : String.fromCharCode(97 + value);
-  return `${A}keys/${ch}${state}.webp`;
+  const s = String(state).replace(/^_/, '');
+  return `${A}keys/${ch}${s ? '_' + s : ''}.webp`;
 }
 
 // screen -> background image
@@ -105,8 +112,8 @@ export function manifest() {
     if (hasRunFrames(i)) { list.push(horseFrame(i, 'RUN1')); list.push(horseFrame(i, 'RUN2')); }
   }
   // keys
-  for (let v = 0; v < 4; v++) for (const s of ['', '_G', '_R']) list.push(keyImage('easy', v, s));
-  for (let v = 0; v < 26; v++) for (const s of ['', '_G', '_R']) list.push(keyImage('hard', v, s));
+  for (let v = 0; v < 4; v++) for (const s of ['', 'G', 'R']) list.push(keyImage('easy', v, s));
+  for (let v = 0; v < 26; v++) for (const s of ['', 'G', 'R']) list.push(keyImage('hard', v, s));
   return list;
 }
 
