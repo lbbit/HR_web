@@ -10,7 +10,7 @@
 #    make up PORT=80
 # =============================================================================
 
-IMAGE ?= hr-web:latest
+IMAGE ?= ghcr.io/lbbit/hr_web:latest
 PORT  ?= 8080
 PY    ?= python
 COMPOSE ?= docker compose
