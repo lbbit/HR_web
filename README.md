@@ -232,7 +232,7 @@ Caddy 自动申领并续期 Let's Encrypt 证书，同时负责 80 → 443 跳�
 | --- | --- |
 | **构建闸门** | 三段式构建：打包 → **跑完整回归测试** → 出运行镜像。测试不过就产不出可用镜像（`--build-arg SKIP_TESTS=1` 是应急开关） |
 | **不以 root 运行** | 基础镜像 `nginxinc/nginx-unprivileged:1.27-alpine`（uid 101）。构建期还会断言 `id -u != 0`，有人换成 root 镜像会直接构建失败 |
-| **配置先校验** | 构建期用 `nginx -t` 解析整份站点配置（包一层最小 `http{}` 外壳）。配置写错在构建时暴露，而不是等运维在服务器上启动才发现 |
+| **配置先校验** | 构建期 `nginx -t`，按基础镜像自带的 `nginx.conf` 解析整份配置（含我们覆盖进去的 `conf.d/default.conf`）。配置写错在构建时暴露，而不是等运维在服务器上启动才发现 |
 | **离线可用** | 构建期扫描源码，出现会触发外部请求的写法（`src=`/`href=`/`url()`/`@import` 指向 http(s)）就直接失败 |
 | **缓存策略** | `/assets/**` → `max-age=31536000`（素材同名不变）；HTML/JS/CSS → `no-cache`，靠 ETag 走 304 |
 | **压缩** | gzip 只作用于文本类型；webp / woff2 本身已压缩，不重复压 |
@@ -243,6 +243,32 @@ Caddy 自动申领并续期 Let's Encrypt 证书，同时负责 80 → 443 跳�
 | **自动发布** | push 到 main 或打 `v*` tag，GitHub Actions 构建并推送 GHCR 镜像（发布流程本身也是 CI，因为构建内含测试闸门） |
 
 容器内端口固定 **8080**（与 rootless 基础镜像约定一致），对外端口用发布映射调整。
+
+### 构建期踩过的两个坑
+
+两个都只在 Linux + uid 101 下暴露，而且在本地 `docker build` 未必复现：
+
+- **`nginx -t` 不要加 `-c` 指向自造配置。** 为了让校验「更纯粹」而手工包一层
+  `events{}`/`http{}` 外壳，反而会让 nginx 不再读镜像自带的 `nginx.conf` —— 而
+  `nginx-unprivileged` 恰恰把 `pid` 与全部 `*_temp_path` 改到 `/tmp` 的改动写在
+  **那份文件里**。少掉它们，nginx 转去写编译期默认路径，而构建身份是 uid 101：
+
+  ```
+  nginx: the configuration file /tmp/check.conf syntax is ok
+  [emerg] 8#8: open() "/run/nginx.pid" failed (13: Permission denied)
+  nginx: configuration file /tmp/check.conf test failed
+  ```
+
+  注意第一行 —— **配置语法本来就是 ok 的**，纯粹是路径不可写把校验判死了。这也说明
+  这种失败很难靠 review 配置本身发现。直接用 `nginx -t`（它本来就 `include
+  conf.d/*.conf`）既更简单，也更贴近运行期真相。
+- **gate 阶段的 COPY 要凑齐测试会读到的路径。** 素材测试会顺着 `README.md` 里的
+  13 张截图引用去核 `docs/screenshots/*.png`，也会核对 `deploy/nginx/404.html`；
+  这两样不 COPY 进 gate 就会报 `BROKEN REF` 让构建失败，所以 `.dockerignore`
+  里也不能排除 `docs/`。
+
+改完用 `make gate` 就能先自查一遍：它把 Dockerfile 阶段 1、2 的 COPY 原样铺进一个
+临时目录，再在里头跑同样的两个测试 —— 不用 docker，也不用等一轮 CI。
 
 ### 直接跑已发布的镜像
 
@@ -273,6 +299,7 @@ HR_web/
 │   └── assets.mjs          # 素材完整性 + 标记引用 + 可选 HTTP/MIME 校验
 ├── tools/
 │   ├── subset-font.py      # 生成自托管像素字体子集，并逐字形校验与上游一致
+│   ├── gate-sim.mjs        # 不用 docker 本地复现镜像的构建闸门（照 Dockerfile 的 COPY 铺目录）
 │   └── shots/              # 界面截图流水线（无 npm 依赖）
 │       ├── scenes.mjs      # 截图清单：13 个界面的舞台 / 种子 / 期望尺寸 / 配文
 │       ├── shot.html       # 同源 iframe 宿主：被驱动的是真实的 index.html

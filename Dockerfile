@@ -60,10 +60,16 @@ RUN set -eu; \
 FROM bundle AS gate
 ARG SKIP_TESTS=0
 
-# test/assets.mjs 会校验 README.md，两套测试都按仓库目录结构解析路径，
-# 所以闸门阶段需要与仓库一致的目录布局。
+# 两套测试都按**仓库目录结构**解析路径，所以闸门阶段必须摆出与仓库一致的布局：
+#   README.md            素材测试会扫它内嵌的 13 张界面截图引用
+#   docs/                上面那些截图本体；少一个引用就报 BROKEN REF 并判失败
+#   deploy/nginx/404.html 同样是被逐个核对的 markup 引用
+# 这几样只存在于 gate 这个中间层。runtime 阶段是按文件名逐个 COPY 的，
+# 所以 docs/ 与 deploy/ 不会进最终镜像。
 COPY README.md ./
 COPY test      ./test
+COPY docs      ./docs
+COPY deploy    ./deploy
 
 RUN set -eu; \
     if [ "$SKIP_TESTS" = "1" ]; then \
@@ -100,15 +106,23 @@ RUN set -eu; \
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
 
 # ---- 构建期校验 nginx 配置 --------------------------------------------------
-# 否则配置写错只会在运维启动容器时才报错。包一层最小的 http{} 外壳，
-# 让 nginx -t 真正解析整个 server 块。
-RUN set -eu; \
-    { echo 'events {}'; echo 'http {'; \
-      sed 's/^/    /' /etc/nginx/conf.d/default.conf; \
-      echo '}'; } > /tmp/check.conf; \
-    nginx -t -c /tmp/check.conf; \
-    rm -f /tmp/check.conf; \
-    echo "nginx 配置: 语法校验通过"
+# 否则配置写错只会在运维启动容器时才报错。
+#
+# 就用基础镜像自带的 nginx.conf 来校验：它本来就 include conf.d/*.conf，
+# 我们那份 default.conf 会被完整解析，而且校验的正是**运行期真正生效的那套配置**。
+#
+# 不要写成 `nginx -t -c <自造配置文件>`（哪怕只是外面包一层 events{}/http{}）：
+# 加了 -c 之后 nginx 不再读镜像的 nginx.conf，而 nginx-unprivileged 恰恰把
+# pid 与全部 *_temp_path 改到 /tmp——这些改动就写在它的 nginx.conf 里，
+# 也正是该镜像 README「Troubleshooting」的头两条。少了它们，nginx 会去写
+# 编译期默认路径，而构建身份是 uid 101：
+#   nginx: the configuration file /tmp/check.conf syntax is ok
+#   [emerg] 8#8: open() "/run/nginx.pid" failed (13: Permission denied)
+#   nginx: configuration file /tmp/check.conf test failed
+# 注意第一行：**配置语法本来就是 ok 的**，纯粹是路径不可写把校验判死了
+# （CI 上就是这么挂的，退出码 1）。docker-compose.yml 里给 /var/cache/nginx
+# 挂的那个 tmpfs「保险栓」，防的是同一件事的另一面。
+RUN nginx -t
 
 # ---- 断言：运行期不需要写根文件系统 -----------------------------------------
 # 官方 entrypoint 只有在 /etc/nginx/templates 有内容时才需要写 /etc/nginx/conf.d。

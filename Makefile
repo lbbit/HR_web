@@ -16,7 +16,7 @@ PY    ?= python
 COMPOSE ?= docker compose
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart logs ps sh health test assets font shots shots-probe run build https prod clean nuke
+.PHONY: help up down restart logs ps sh health test assets gate font shots shots-probe run build https prod clean nuke
 
 help: ## 显示所有可用目标
 	@echo "魔幻赛马 / Horse Racing —— 可用目标"
@@ -60,6 +60,9 @@ test: ## 跑无头回归测试（需要 node ≥ 20）
 
 assets: ## 只校验素材完整性（磁盘存在性 / 大小写 / 孤儿文件）
 	node test/assets.mjs
+
+gate: ## 不用 docker，本地复现镜像的构建闸门（照 Dockerfile 的 COPY 铺目录后跑测试）
+	node tools/gate-sim.mjs
 
 font: ## 重新生成自托管像素字体子集（需要 python + fonttools brotli）
 	$(PY) tools/subset-font.py

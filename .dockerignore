@@ -1,5 +1,7 @@
 # 构建上下文瘦身 —— 直接影响 docker build 的耗时与缓存命中率。
-# 注意 test/ 与 README.md 必须留着：gate 阶段跑回归测试要用。
+# 注意 test/、README.md、docs/、deploy/ 必须留着：gate 阶段跑回归测试要用，
+# 而素材测试会顺着 README.md 里的 13 张截图引用去核 docs/screenshots/*.png，
+# 也会核对 deploy/nginx/404.html。少任何一个，闸门都会判 BROKEN REF 并让构建失败。
 
 # 版本库数据（体积大、且不该进镜像）
 .git
