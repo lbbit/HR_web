@@ -8,6 +8,70 @@
 
 ---
 
+## 界面预览
+
+下面 13 张截图不是手截的，也不来自任何设计稿：它们由无头 Chrome 驱动
+**仓库里正在运行的真实页面**自动生成，每张都逐字节校验过 PNG 尺寸与驱动状态，
+素材或布局一变，一条命令就能全部重出（见「重新生成截图」）。
+
+### 主流程（450×600）
+
+| | |
+| --- | --- |
+| <img src="docs/screenshots/01-title.png" width="290" alt="标题页"> | <img src="docs/screenshots/04-menu.png" width="290" alt="主菜单"> |
+| **标题页** —— 原作 `BG0` 像素画 + 原作按钮素材 | **主菜单** —— 五个入口 + 手柄装饰 |
+| <img src="docs/screenshots/05-select.png" width="290" alt="选关"> | <img src="docs/screenshots/06-stable.png" width="290" alt="马厩"> |
+| **选关** —— 对手 / 难度 / 出战马，可顺手翻马厩 | **马厩** —— 20 匹收集进度，未解锁的带锁头 |
+| <img src="docs/screenshots/02-login.png" width="290" alt="登录"> | <img src="docs/screenshots/03-register.png" width="290" alt="注册"> |
+| **登录** —— 标签是原作烘焙好的像素图 | **注册** —— 含用户名查重 |
+
+### 比赛（1000×622）
+
+| | |
+| --- | --- |
+| <img src="docs/screenshots/07-race.png" width="420" alt="比赛中"> | <img src="docs/screenshots/08-pause.png" width="420" alt="暂停菜单"> |
+| **比赛中** —— 20 组 × 6 键、LCD 倒计时、双积分、战况日志 | **暂停菜单** —— 继续 / 退到选关（原作 `BG20` 对话框） |
+
+### 结算与系统
+
+<img src="docs/screenshots/09-gameover.png" width="470" alt="结算">
+
+**结算** —— 领奖台名次、本次 / 对手积分、进入排行榜第 N 名、新纪录、新马解锁
+
+| | |
+| --- | --- |
+| <img src="docs/screenshots/10-rank.png" width="290" alt="排行榜"> | <img src="docs/screenshots/11-usercenter.png" width="290" alt="个人中心"> |
+| **排行榜** —— 简单 / 困难双榜 Top 5，金冠 / 银冠 / 铜冠 | **个人中心** —— 头像、时长、马数、最高排名与积分 |
+| <img src="docs/screenshots/12-rule.png" width="290" alt="规则"> | <img src="docs/screenshots/13-admin.png" width="290" alt="用户管理"> |
+| **规则** —— 整页文字都是原作 `BG6` 里画好的美术 | **用户管理** —— 仅管理员可见，`BG12` 的「伪窗口」外观 |
+
+### 重新生成截图
+
+不依赖任何 npm 包：脚本自己起一个临时静态服务器，用 Node 内置的 `WebSocket`
+直接讲 Chrome DevTools 协议，等驱动报告完成后才截图，再用 `Page.captureScreenshot`
+按精确视口取像。**刻意不用** `--screenshot` + `--virtual-time-budget`：
+虚拟时钟下无头合成器不再产帧，`requestAnimationFrame` 只跳一帧，
+`src/game.js` 的比赛循环就永远停在倒计时上。
+
+```bash
+node tools/shots/capture.mjs              # 全量重出 + 逐张校验
+node tools/shots/capture.mjs --only race  # 只重出指定界面
+node tools/shots/capture.mjs --probe      # 只跑界面体检，不出图
+node tools/shots/capture.mjs --scale 1    # 出 1× 小图
+make shots                                # 等同第一条
+```
+
+浏览器按 `CHROME_PATH` → Chrome → Edge → Chromium 的顺序自动探测。
+
+`--probe` 会遍历全部 13 个界面并核对：裂图（`naturalWidth === 0`）、
+HTTP ≥400 的资源、元素是否越出舞台（按**每个界面自身**的底图尺寸判定，
+而不是当时恰好显示的那个界面的尺寸）、按键图块是否透明且按原生 64×64 渲染、
+LCD 底色、以及 11 个 HUD 控件是否落在原作 `.ui` 坐标上。
+这套体检查出过一个真缺陷 —— 它曾在竖屏舞台上量 1000×622 的比赛界面，
+报出 21 个「越界」，其实是审计本身用错了参照系。
+
+---
+
 ## 玩法
 
 键盘节奏竞速。每局共 **20 组** 按键，每组限时 **2 秒**，开局 3 秒倒计时。
@@ -87,6 +151,11 @@
 - **传说马 #19 骑乘时马匹消失** —— 原作只画了 `HORSE19_STAND`，没有 `RUN1/RUN2`，
   原作会渲染成空白 pixmap，Web 版则会产生 404。现让 #19 的跑动帧优雅回退到 `STAND`。
 - **用户中心头像按钮未做登录态保护**，未登录时点击会抛 `TypeError`，现加了守卫。
+- **战况日志的追加方向与原作相反** —— 原作是 `textBrowser_log->append(...)`，
+  一次追加"`N: perfect! 0.68s按完!`" + "` 积分+：444`"两行，新纪录落在**最下面**；
+  旧版却用 `unshift` 且把积分行先插，导致新条目跑到了顶部、积分行压在组行上方。
+  现按原作语义改为 `push`（组行在前、积分行紧随），并把日志框滚到底部，
+  与原作 `QTextBrowser` 的行为一致。这个问题是**截图体检**发现的。
 - 补上缺失的 `assets/ui/favicon.ico`（复用原作 `ICON.ico`），消除 404。
 
 ---
@@ -200,10 +269,17 @@ HR_web/
 │   ├── storage.js          # localStorage 持久化（账号 / 双榜 / 马厩 / 统计 / 设置）
 │   └── assets.js           # 原作素材清单、路径构造、预加载与图片缓存
 ├── test/
-│   ├── harness.mjs         # 无头回归测试：完整游戏流程（205 项断言）
+│   ├── harness.mjs         # 无头回归测试：完整游戏流程（217 项断言）
 │   └── assets.mjs          # 素材完整性 + 标记引用 + 可选 HTTP/MIME 校验
 ├── tools/
-│   └── subset-font.py      # 生成自托管像素字体子集，并逐字形校验与上游一致
+│   ├── subset-font.py      # 生成自托管像素字体子集，并逐字形校验与上游一致
+│   └── shots/              # 界面截图流水线（无 npm 依赖）
+│       ├── scenes.mjs      # 截图清单：13 个界面的舞台 / 种子 / 期望尺寸 / 配文
+│       ├── shot.html       # 同源 iframe 宿主：被驱动的是真实的 index.html
+│       ├── shot.mjs        # 浏览器内驱动：播种存档 → 真实点击/按键 → 锁定整数缩放
+│       └── capture.mjs     # Node 侧：临时服务器 + CDP 实时驱动 + 逐张校验
+├── docs/
+│   └── screenshots/        # README 用的 13 张界面截图（由 tools/shots 生成）
 ├── deploy/
 │   ├── nginx/
 │   │   ├── default.conf    # 站点配置：缓存 / 压缩 / 安全头 / healthz
@@ -249,9 +325,10 @@ HR_web/
 注册/登录/改名/改密、管理员删号、完整 20 局比赛、暂停/继续/退出、`Esc` 退出、
 排行榜与 20 匹马解锁（含传说马 #19）、音频引擎全部分支、
 以及 314 个素材的磁盘存在性、大小写敏感路径、和可选的 HTTP 200 + MIME 校验。
-`test/assets.mjs` 还会解析 `index.html` / `styles.css` / `404.html` 里的
+`test/assets.mjs` 还会解析 `index.html` / `styles.css` / `404.html` / `README.md` 里的
 `src=` / `href=` / `url()` 引用并逐个核对 —— 字体是从 CSS 与 `<head>` 预加载引入的，
-JS 素材清单看不见它，拼错不会报错、只会白白浪费一次请求，所以这条链路必须单独校验。
+JS 素材清单看不见它，拼错不会报错、只会白白浪费一次请求，所以这条链路必须单独校验；
+README 里那 13 张截图的路径同理，改名后只会变成一张裂图，没人会注意到。
 
 测试里带三个**防空转**断言：素材请求数必须 ≥300、不得出现被吞掉的 `preload error`、
 标记引用扫描必须至少找到 3 条。没有它们，一个缺失的浏览器全局（例如 `Image`）
@@ -274,12 +351,18 @@ node test/assets.mjs http://127.0.0.1:8080
 当前结果：
 
 ```
-PASS 205   FAIL 0
+PASS 217   FAIL 0
 ASSETS OK  (316 files on disk, 314/314 in manifest, 0 orphans, 0 case mismatches,
             0 broken markup refs, 0.81 MB art + 0.28 MB font)
 HTTP 323/323 -> 200
 
 FONT OK    (7736/7736 expected glyphs outline-identical to upstream, 0 dropped)
+```
+
+界面侧另有一套独立的体检（需要 Chrome），遍历 13 个界面核对裂图、越界资源与保真不变量：
+
+```bash
+node tools/shots/capture.mjs --probe     # FAILURES 0 即通过
 ```
 
 ## License

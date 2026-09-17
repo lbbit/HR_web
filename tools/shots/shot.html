@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>HR_web screenshot driver</title>
+  <style>
+    /* The app is driven through a same-origin iframe instead of a copy of
+       index.html, so the screenshots always exercise the shipped page. */
+    html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+    #app-frame { position: fixed; left: 0; top: 0; border: 0; display: block; }
+
+    /* status / audit report — only visible when the driver is asked for it */
+    #out {
+      position: fixed; left: 0; top: 0; z-index: 9; display: none;
+      margin: 0; padding: 6px; width: 100%; max-height: 100%; overflow: auto;
+      font: 12px/1.4 ui-monospace, monospace; color: #0f0; background: #000;
+      white-space: pre-wrap;
+    }
+    body.report #out { display: block; }
+    body.report #app-frame { visibility: hidden; }
+  </style>
+</head>
+<body>
+  <iframe id="app-frame" title="魔幻赛马"></iframe>
+  <pre id="out"></pre>
+  <script type="module" src="./shot.mjs"></script>
+</body>
+</html>

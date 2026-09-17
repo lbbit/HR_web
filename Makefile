@@ -16,7 +16,7 @@ PY    ?= python
 COMPOSE ?= docker compose
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart logs ps sh health test assets font run build https prod clean nuke
+.PHONY: help up down restart logs ps sh health test assets font shots shots-probe run build https prod clean nuke
 
 help: ## 显示所有可用目标
 	@echo "魔幻赛马 / Horse Racing —— 可用目标"
@@ -63,6 +63,12 @@ assets: ## 只校验素材完整性（磁盘存在性 / 大小写 / 孤儿文件
 
 font: ## 重新生成自托管像素字体子集（需要 python + fonttools brotli）
 	$(PY) tools/subset-font.py
+
+shots: ## 重新生成 README 的界面截图到 docs/screenshots/（需要 Chrome/Chromium 与 node）
+	node tools/shots/capture.mjs
+
+shots-probe: ## 只跑界面 DOM 体检（裂图 / 越界 / 保真不变量），不出图
+	node tools/shots/capture.mjs --probe
 
 # ------------------------------------------------------------------ 运行与发布
 run: ## 不构建，直接跑已有镜像（前台）

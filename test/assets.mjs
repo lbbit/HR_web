@@ -74,7 +74,10 @@ for (const c of core) {
 // The pixel font is loaded from CSS and preloaded from <head>, so a typo there
 // is invisible to manifest() and would silently burn a request (plus a console
 // warning) instead of failing. Anything the browser is told to fetch must exist.
-const MARKUP = ['index.html', 'styles.css', 'deploy/nginx/404.html'];
+// README.md is in here for the same reason: its screenshot <img> tags are the
+// repo's front door, and a renamed screenshot would render as a broken image
+// with nothing failing anywhere.
+const MARKUP = ['index.html', 'styles.css', 'deploy/nginx/404.html', 'README.md'];
 const refs = new Set();
 for (const f of MARKUP) {
   const abs = path.join(ROOT, f);
