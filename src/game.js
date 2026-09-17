@@ -14,6 +14,16 @@ const GROUP_KEYS = 6;
 const GROUP_TIME = 2.0;          // seconds per key-group
 const TOTAL_TIME = ROUNDS * GROUP_TIME; // 40s
 const DIST_MX = 1400;            // total mx that maps to the whole track
+// A 20-group race appends 41 log lines; the cap is a guard, not a design limit.
+// QTextBrowser keeps everything and scrolls, so this stays well above the real count.
+const LOG_LINES = 60;
+
+// QSlider geometry from gamestart.ui: 462 wide with the groove inset 12px each side.
+const SLIDER_W = 462, SLIDER_INSET = 12;
+const SLIDER_SPAN = SLIDER_W - SLIDER_INSET * 2;
+
+/** QString::number() style: shortest form, so 2 -> "2", 1.8 -> "1.8", 1.24 -> "1.24". */
+function qnum(n) { return String(Number(n.toFixed(2))); }
 
 export function fixIndexScore(cK, cT) {
   cT = Math.max(0, Math.min(2, cT));
@@ -78,16 +88,28 @@ export class RaceGame {
     r.isHardTxt.textContent = isHard ? '困难' : '简单';
     r.score1.textContent = '0';
     r.score2.textContent = '0';
-    r.sliderFill.style.width = '0%';
+    r.sliderFill.style.width = '0px';
+    r.sliderHandle.style.left = SLIDER_INSET + 'px';
     r.progressFill.style.width = '0%';
-    r.sliderLabel.textContent = '';
-    r.badge.textContent = '中';
+    r.sliderLabel.textContent = GROUP_TIME.toFixed(2) + 's';
+    // QLCDNumber colours are phase-driven (gamestart.cpp:323 red -> :341 green)
+    r.lcd.style.color = '#ff0000';
+    r.lcd.textContent = '3';
+    this._setPauseLabel(false);
     this._renderLog();
 
     this._prepareGroup();
     window.addEventListener('keydown', this._onKey);
     if (audio.musicOn) audio.playBGM(audio.track);
     this._raf = requestAnimationFrame(this._loop);
+  }
+
+  /** pushButton_StartandStop toggles between 暂停游戏 (running) and 开始游戏 (paused). */
+  _setPauseLabel(paused) {
+    const b = this.r.pauseBtn;
+    if (!b) return;
+    b.textContent = paused ? '开始游戏' : '暂停游戏';
+    b.setAttribute('aria-label', b.textContent);
   }
 
   _frame(horse, frame) {
@@ -97,12 +119,14 @@ export class RaceGame {
   pause() {
     if (this.phase !== 'racing' || this.paused) return;
     this.paused = true;
+    this._setPauseLabel(true);
     audio.stopBGM();
     if (this.cb.onPauseRequest) this.cb.onPauseRequest();
   }
   resume() {
     if (!this.paused) return;
     this.paused = false;
+    this._setPauseLabel(false);
     this._lastTs = 0; // avoid a huge dt after the pause
     if (audio.musicOn) audio.playBGM(audio.track);
   }
@@ -169,7 +193,8 @@ export class RaceGame {
       r.keys[i].src = assets.keyImage(this.mode, this.keys[i], '');
       r.boxes[i].className = 'keytile' + (i === 0 ? ' cur' : '');
     }
-    r.sliderFill.style.width = '0%';
+    r.sliderFill.style.width = '0px';
+    r.sliderHandle.style.left = SLIDER_INSET + 'px';
     // rival plays this group
     const s = this.rival.skill;
     let ck = 0;
@@ -191,9 +216,15 @@ export class RaceGame {
     else if (cK === 5) ev = 'great!';
     else if (cK === 4) ev = 'good!';
     else if (cK === 0) ev = 'miss!';
-    this.r.badge.textContent = cK >= 6 ? '快' : cK >= 4 ? '中' : '慢';
-    this.logLines.unshift(`${this.groupIndex}: ${ev} ${this.completeTime.toFixed(1)}s  +${score}`);
-    while (this.logLines.length > 8) this.logLines.pop();
+    // textBrowser_log line, verbatim from gamestart.cpp:596 —
+    //   append(keyGroup + ": " + evaluation + " " + CompleteTime + "s按完!\n 积分+：" + indexScore)
+    // One append() carrying both lines, so the group line comes first and its score
+    // follows it, and each new entry lands BELOW the previous one.
+    this.logLines.push(`${this.groupIndex}: ${ev} ${qnum(this.completeTime)}s按完!`);
+    this.logLines.push(` 积分+：${score}`);
+    // QTextBrowser keeps the whole log; we only bound it defensively. Because new
+    // entries go on the end, the oldest line is the one that ages out.
+    while (this.logLines.length > LOG_LINES) this.logLines.shift();
     this._renderLog();
 
     this.r.score1.textContent = String(this.playerScore);
@@ -239,6 +270,8 @@ export class RaceGame {
       d.className = 'ln'; d.textContent = t;
       box.appendChild(d);
     });
+    // QTextBrowser.append() scrolls to the tail, so the newest line stays visible.
+    box.scrollTop = box.scrollHeight || 0;
   }
 
   // ---------- main loop ----------
@@ -259,17 +292,21 @@ export class RaceGame {
         this.phase = 'racing';
         this.elapsedTotal = 0;
         this.lastWhole = 0;
+        r.lcd.style.color = '#008000';   // QLCDNumber turns green once racing
         audio.countBeep(true);
       }
     } else if (this.phase === 'racing') {
       this.groupElapsed += dt;
       this.elapsedTotal += dt;
       const remain = Math.max(0, TOTAL_TIME - this.elapsedTotal);
-      const rg = Math.max(0, GROUP_TIME - this.groupElapsed);
+      const pct = Math.min(1, this.groupElapsed / GROUP_TIME);
       r.lcd.textContent = String(Math.ceil(remain));
-      r.lcd.style.color = remain <= 5 ? '#c00' : '';
-      r.sliderFill.style.width = Math.min(100, (this.groupElapsed / GROUP_TIME) * 100) + '%';
-      r.sliderLabel.textContent = (GROUP_TIME - Math.max(0, GROUP_TIME - this.groupElapsed)).toFixed(2) + 's';
+      // #FF0088 for the final group (gamestart.cpp:416), green otherwise
+      r.lcd.style.color = this.groupIndex >= ROUNDS - 1 ? '#FF0088' : '#008000';
+      r.sliderFill.style.width = (pct * SLIDER_SPAN).toFixed(1) + 'px';
+      r.sliderHandle.style.left = (SLIDER_INSET + pct * SLIDER_SPAN).toFixed(1) + 'px';
+      // label_lefttime shows the REMAINING seconds of the group, not the elapsed ones
+      r.sliderLabel.textContent = qnum(GROUP_TIME - this.groupElapsed) + 's';
       if (this.groupElapsed >= GROUP_TIME) this._endGroup();
     }
 

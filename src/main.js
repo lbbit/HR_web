@@ -188,18 +188,18 @@ function buildTitle() {
     left: { base: 'SWITCHUSER', label: '切换用户', onClick: () => { store.logout(); go('login'); } },
     right: { base: 'QUIT', label: '退出', onClick: () => toast('感谢游玩！可以关闭本页面了。') },
   }) });
-  ui.titleMusic = mk('button', 'chip');
-  ui.titleMusic.style.cssText = 'left:372px;top:12px;font-size:12px;padding:3px 6px';
-  ui.titleMusic.setAttribute('aria-label', '音乐开关');
-  ui.titleMusic.addEventListener('click', () => {
-    const on = !store.getSettings().music; store.setSettings({ music: on }); audio.setMusic(on); syncMusic();
-  });
-  s.appendChild(ui.titleMusic);
-  onEnter.title = syncMusic;
+  // NOTE: the original has no music button on the title screen — its only music
+  // toggle lives on the race screen (pushButton_music, 904,20). Nothing plays
+  // here either (BGM starts with the race), so adding one would be pure invention.
 }
+/**
+ * Mirror the persisted music setting onto the race screen's original music art.
+ * (Kept as a function because both the audio bootstrap and the race screen call it.)
+ */
 function syncMusic() {
-  if (!ui.titleMusic) return;
-  ui.titleMusic.textContent = store.getSettings().music ? '♪ 开' : '♪ 关';
+  const btn = ui.race && ui.race.musicBtn;
+  if (!btn) return;
+  btn.style.backgroundImage = `url("${assets.ui(store.getSettings().music ? 'withmusic' : 'withoutmusic')}")`;
 }
 
 // ---- LOGIN (BG1) ----
@@ -532,16 +532,22 @@ function buildAdmin() {
 }
 
 // ---- GAME OVER (BG13) ----
+// Geometry mirrors gameover.ui exactly:
+//   label_firstH 195,170  label_secondH 105,215  label_1name 230,140  label_2name 140,195
+//   label_myscore 490,90  label_rivalscore 490,160
+//   label_isnew 590,100 (新纪录)   label_inrank 320,100 (进入排行榜第 N 名)
+//   label_isnew_2 480,250 ((新马)) label_newhorsepic 480,290
 function buildGameOver() {
   const s = makeScreen('gameover');
   const first = pimg(s, assets.horseFrame(0, 'STAND'), { x: 195, y: 170, w: 120, h: 90, alt: '冠军马' });
   const second = pimg(s, assets.horseFrame(1, 'STAND'), { x: 105, y: 215, w: 120, h: 90, alt: '亚军马' });
-  const n1 = ptext(s, { x: 225, y: 142, w: 130, h: 20, cls: 'sm', align: 'center' });
-  const n2 = ptext(s, { x: 135, y: 197, w: 130, h: 20, cls: 'sm', align: 'center' });
-  const myScore = ptext(s, { x: 490, y: 96, w: 100, h: 40, cls: 'big', align: 'center' });
-  const rivalScore = ptext(s, { x: 490, y: 166, w: 100, h: 40, cls: 'big', align: 'center' });
-  const inrank = ptext(s, { x: 250, y: 100, w: 230, h: 30, cls: 'sm', align: 'center', color: '#b00' });
-  const newHorseLbl = ptext(s, { x: 460, y: 250, w: 160, h: 30, cls: 'sm', align: 'center' });
+  const n1 = ptext(s, { x: 230, y: 140, w: 54, h: 20, cls: 'sm', align: 'center' });
+  const n2 = ptext(s, { x: 140, y: 195, w: 54, h: 16, cls: 'sm', align: 'center' });
+  const myScore = ptext(s, { x: 490, y: 90, w: 100, h: 50, cls: 'big', align: 'center' });
+  const rivalScore = ptext(s, { x: 490, y: 160, w: 100, h: 50, cls: 'big', align: 'center' });
+  const isNew = ptext(s, { x: 590, y: 100, w: 80, h: 40, cls: 'sm', align: 'center', color: '#b00' });
+  const inrank = ptext(s, { x: 320, y: 100, w: 161, h: 31, cls: 'sm', align: 'center', color: '#b00' });
+  const newHorseLbl = ptext(s, { x: 480, y: 250, w: 121, h: 41, cls: 'sm', align: 'center' });
   const newHorse = pimg(s, assets.horseFrame(0, 'STAND'), { x: 480, y: 290, w: 120, h: 90, alt: '新马' });
   pbtn(s, { base: 'RETURN', x: 270, y: 370, w: 150, h: 80, label: '返回', onClick: () => go('menu') });
   ui.gameoverPaint = (res) => {
@@ -553,10 +559,8 @@ function buildGameOver() {
     n2.textContent = myWon ? res.rivalName : '你';
     myScore.textContent = String(res.playerScore);
     rivalScore.textContent = String(res.rivalScore);
-    const bits = [];
-    if (res.isNewRecord) bits.push('新纪录');
-    if (res.inRank) bits.push('进入排行榜第 ' + res.rankPos + ' 名');
-    inrank.textContent = bits.join(' · ');
+    isNew.textContent = res.isNewRecord ? '新纪录' : '';
+    inrank.textContent = res.inRank ? '进入排行榜第 ' + res.rankPos + ' 名' : '';
     if (res.unlocked === 20) { newHorseLbl.textContent = '集齐全部 20 匹！'; newHorse.src = assets.horseFrame(19, 'STAND'); }
     else if (res.unlocked >= 0) { newHorseLbl.textContent = '获得新马 #' + res.unlocked; newHorse.src = assets.horseFrame(res.unlocked, 'STAND'); }
     else { newHorseLbl.textContent = '本局未获得新马'; newHorse.src = assets.horseFrame(res.horse, 'STAND'); }
@@ -581,31 +585,36 @@ function buildRace() {
     inner.appendChild(box); keys.push(im); boxes.push(box);
   }
 
-  const slider = mk('div', 'slider'); slider.style.cssText = 'left:180px;top:440px;width:462px;';
-  const sliderFill = mk('i'); slider.appendChild(sliderFill); inner.appendChild(slider);
-  const sliderLabel = ptext(inner, { x: 650, y: 442, w: 90, h: 20, cls: 'xs' });
+  // QSlider 180,440 462x22 — the groove line is already painted in BG9_0, so the
+  // element stays transparent and only carries the gradient sub-page + the handle.
+  const slider = mk('div', 'slider'); slider.style.cssText = 'left:180px;top:440px;width:462px;height:22px;';
+  const sliderFill = mk('i'); slider.appendChild(sliderFill);
+  const sliderHandle = mk('b'); slider.appendChild(sliderHandle);
+  inner.appendChild(slider);
+  // label_lefttime 640,440 54x21 — remaining seconds of the current group ("1.86s")
+  const sliderLabel = ptext(inner, { x: 640, y: 440, w: 54, h: 21, cls: 'sm', align: 'center' });
 
   const lcd = mk('div', 'lcd'); lcd.style.cssText = 'left:20px;top:490px;width:101px;height:51px;'; inner.appendChild(lcd);
-  ptext(inner, { x: 126, y: 498, w: 40, h: 40, cls: 'big', text: 'S' });
-  const isHardTxt = ptext(inner, { x: 20, y: 452, w: 111, h: 36, cls: 'sm', align: 'center' });
+  ptext(inner, { x: 130, y: 490, w: 31, h: 51, cls: 'big', align: 'center', text: 'S', size: 40 });
+  const isHardTxt = ptext(inner, { x: 20, y: 440, w: 111, h: 41, cls: 'sm', align: 'center' });
 
-  const score1 = ptext(inner, { x: 850, y: 400, w: 120, h: 22, cls: 'sm' });
-  const score2 = ptext(inner, { x: 850, y: 432, w: 120, h: 22, cls: 'sm' });
+  const score1 = ptext(inner, { x: 850, y: 400, w: 54, h: 21, cls: 'sm' });
+  const score2 = ptext(inner, { x: 850, y: 433, w: 54, h: 20, cls: 'sm' });
 
   const logBox = mk('div', 'pixelbox');
-  logBox.style.cssText = 'left:828px;top:480px;width:142px;height:111px;';
+  logBox.style.cssText = 'left:830px;top:480px;width:131px;height:111px;';
   logBox.setAttribute('aria-hidden', 'true'); inner.appendChild(logBox);
 
   const pbar = mk('div', 'pbar'); pbar.style.cssText = 'left:23px;top:581px;width:789px;height:20px;';
   const progressFill = mk('i'); pbar.appendChild(progressFill); inner.appendChild(pbar);
 
-  const badge = mk('div', 'badge'); badge.style.cssText = 'left:878px;top:150px;'; badge.textContent = '中'; inner.appendChild(badge);
-
+  // pushButton_StartandStop 40,30 100x50 — the original's label toggles between
+  // 暂停游戏 and 开始游戏 as you pause/resume (gamestart.cpp on_..._clicked).
   const pauseBtn = mk('button', 'chip');
   pauseBtn.type = 'button';
   pauseBtn.style.cssText = 'left:40px;top:30px;width:100px;height:50px;font-size:18px';
-  pauseBtn.textContent = '暂停';
-  pauseBtn.setAttribute('aria-label', '暂停');
+  pauseBtn.textContent = '暂停游戏';
+  pauseBtn.setAttribute('aria-label', '暂停游戏');
   pauseBtn.addEventListener('click', () => { audio.click(); if (race) race.pause(); });
   inner.appendChild(pauseBtn);
 
@@ -621,7 +630,7 @@ function buildRace() {
   musicBtn.style.backgroundSize = 'contain';
   musicBtn.style.backgroundRepeat = 'no-repeat';
 
-  ui.race = { inner, bgim, horseRival, horseMe, keys, boxes, slider, sliderFill, sliderLabel, lcd, isHardTxt, score1, score2, logBox, pbar, progressFill, badge, pauseBtn, musicBtn };
+  ui.race = { inner, bgim, horseRival, horseMe, keys, boxes, slider, sliderFill, sliderHandle, sliderLabel, lcd, isHardTxt, score1, score2, logBox, pbar, progressFill, pauseBtn, musicBtn };
 }
 
 // ---------- race lifecycle ----------
@@ -632,6 +641,7 @@ function startRace(config) {
   setStage(assets.RACE_BG_W, assets.RACE_BG_H);
   screens.race.classList.add('active');
   closeDialog();
+  syncMusic();
   race = new RaceGame(R, {
     onFinish: (res) => {
       if (ui.gameoverPaint) ui.gameoverPaint(res);

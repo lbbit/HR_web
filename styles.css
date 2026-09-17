@@ -143,41 +143,67 @@ img, canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 #screen-race { background: #000; }
 .race-inner { position: absolute; left: 0; top: 0; width: 1000px; height: 622px; }
 .horse { position: absolute; width: 120px; height: 90px; image-rendering: pixelated; }
+/* The key art is a bare 64x64 glyph on a transparent background — no box, no
+   border. The original drops them straight onto BG9_0's black key-row frame,
+   and the green/red state is carried by the glyph itself (see getEcorrectPath).
+   Do NOT add a background here: a beige tile would cover the original artwork. */
 .keytile {
   position: absolute; width: 64px; height: 64px;
-  background: #efe4bd; border: 2px solid var(--ink); border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
 }
-.keytile img { width: 52px; height: 52px; image-rendering: pixelated; }
-.keytile.cur { box-shadow: 0 0 0 3px #ffd24a, 0 0 10px #ffb300; }
-.keytile.done { background: #d8f0c0; }
-.keytile.miss { background: #f6c9c0; }
+.keytile img { width: 64px; height: 64px; image-rendering: pixelated; }
+/* square pixel cursor marking "press this one next". The original has no cursor
+   (you infer the position from the already-filled glyphs); this is a usability
+   addition drawn in the same square/black style as the rest of the UI. */
+.keytile.cur { box-shadow: inset 0 0 0 3px #101010; }
 
-.slider { position: absolute; height: 22px; border: 2px solid var(--ink); background: #fdf3b5; }
-.slider > i { display: block; height: 100%; width: 0%; background: #46c1e8; }
+/* QSlider::groove + sub-page from gamestart.ui: a 2px groove inset by 12px on
+   each side, filled with a bottom->top gradient (dark violet -> cyan -> magenta).
+   The groove line itself is part of the BG9_0 art, so the track stays clear. */
+.slider { position: absolute; height: 22px; }
+.slider > i {
+  position: absolute; left: 12px; top: 10px; height: 2px; width: 0;
+  display: block;
+  background: linear-gradient(to top, #1b051b, #49e9ef 25%, #49e9ef 50%, #ad39b0);
+}
+.slider > b {
+  position: absolute; top: 2px; left: 6px; width: 11px; height: 18px;
+  background: #efefef; border: 1px solid #5c5c5c;
+}
 
-.pbar { position: absolute; border: 2px solid var(--ink); background: #fdf3b5; }
-.pbar > i { display: block; height: 100%; width: 0%; background: #b06fd0; }
+/* QProgressBar{border:1px solid grey;border-radius:5px}
+   QProgressBar::chunk{background-color:#CD96CD;width:10px;margin:0.5px}
+   -> the 10px chunk width + margin is what gives the original its segmented look. */
+.pbar {
+  position: absolute; border: 1px solid grey; border-radius: 5px;
+  background: #f7f7f7; overflow: hidden;
+}
+.pbar > i {
+  display: block; height: 100%; width: 0;
+  background: repeating-linear-gradient(to right, #CD96CD 0 9px, #f7f7f7 9px 10px);
+}
 
+/* QLCDNumber: `background-color: yellow` with red / green / #FF0088 digits
+   depending on the phase (gamestart.cpp:323 / 341 / 416). */
 .lcd {
-  position: absolute; background: #fdf08a; border: 3px solid var(--ink);
+  position: absolute; background: #ffff00; border: 2px solid #101010;
   display: flex; align-items: center; justify-content: center;
-  font-size: 34px; color: var(--ink);
+  font-size: 34px; line-height: 1; color: #ff0000;
 }
 .pixelbox {
   position: absolute; background: #fff; border: 2px solid var(--ink);
   overflow: hidden; padding: 3px 4px;
   font-size: 11px; line-height: 1.25; color: #222;
 }
-.pixelbox .ln { white-space: nowrap; }
-.badge {
-  position: absolute; width: 60px; height: 60px; border-radius: 50%;
-  background: #e02424; border: 3px solid #fff; color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 26px; box-shadow: 0 0 0 3px #b71c1c;
-}
+/* QTextBrowser wraps, so let the lines wrap too */
+.pixelbox .ln { white-space: normal; }
+
+/* Pause / music chips. The original's race screen has a real QPushButton
+   (pushButton_StartandStop, text 暂停游戏 / 开始游戏) and a 30x30 music QPushButton
+   whose art we reuse — this style gives the text button the same square/black
+   pixel look as the rest of the reconstruction. */
 .chip {
-  position: absolute; background: #fff; border: 2px solid var(--ink);
+  position: absolute; background: #fdf8cf; border: 3px solid #101010;
   padding: 4px 8px; font-family: var(--font); font-size: 14px;
   color: var(--ink); cursor: pointer;
 }

@@ -651,28 +651,62 @@ ok(keyTiles[0]._cls.has('done') || keyTiles[0]._cls.has('miss'),
 section('RACE — first key-group completes (_endGroup regression)');
 const byPos = (x, y) => descendants(screenEl('race'))
   .find((e) => e.style.left === x + 'px' && e.style.top === y + 'px');
-const score1 = byPos(850, 400), score2 = byPos(850, 432);
-const badge = descendants(screenEl('race')).find((e) => e._cls.has('badge'));
+const score1 = byPos(850, 400), score2 = byPos(850, 433);
 const logBox = descendants(screenEl('race')).find((e) => e._cls.has('pixelbox'));
 const progressFill = descendants(screenEl('race')).find((e) => e._cls.has('pbar')).children[0];
 ok(!!score1 && !!score2, 'dual score labels present at the original coordinates');
-ok(!!badge && !!logBox && !!progressFill, 'badge / log box / progress bar present');
+ok(!!logBox && !!progressFill, 'log box / progress bar present');
+// the original has no round badge (the rating goes to textBrowser_log) — guard
+// against a fabricated HUD element creeping back in
+ok(!descendants(screenEl('race')).some((e) => e._cls.has('badge')),
+   'race HUD has no invented badge (rating lives in the log, as in the original)');
 for (let i = 0; i < 45; i++) pump(50);        // 2.0s group window at 50ms/frame
-ok(['快', '中', '慢'].includes(badge.textContent),
-   `_endGroup ran and updated the speed badge (${JSON.stringify(badge.textContent)})`);
 ok(progressFill.style.width === '5%', `progress bar advanced to 5% after group 1/20 (${progressFill.style.width})`);
 ok(logBox.children.length >= 2, `battle log got a line (${logBox.children.length})`);
-ok(/^\d+: (perfect|great|good|bad|miss)!/.test(logBox.children[0] ? logBox.children[0].textContent : ''),
-   `log line formatted: "${logBox.children[0] && logBox.children[0].textContent}"`);
+// gamestart.cpp:596 appends ONE item carrying both lines:
+//   "N: eval X.XXs按完!\n 积分+：S"
+// so the group line must come first, its score line directly after it, and the
+// newest entry must sit at the bottom (QTextBrowser.append + scrollToBottom).
+const GROUP_LINE = /^\d+: (perfect|great|good|bad|miss)! [\d.]+s按完!$/;
+const SCORE_LINE = /^ 积分\+：\d+$/;
+const logGroup = logBox.children.filter((c) => GROUP_LINE.test(c.textContent));
+const logScore = logBox.children.filter((c) => SCORE_LINE.test(c.textContent));
+ok(logGroup.length >= 1, `log has a group line ("${logGroup[0] && logGroup[0].textContent}")`);
+ok(logScore.length >= 1, `log has a score line ("${logScore[0] && logScore[0].textContent}")`);
+ok(logBox.children[logBox.children.indexOf(logGroup[0]) + 1] === logScore[0],
+   'score line follows its group line (same append() as gamestart.cpp:596)');
+ok(logBox.children[logBox.children.length - 1] === logScore[logScore.length - 1],
+   'newest entry is the last line, not the first (append, not prepend)');
 ok(/^\d+$/.test(score1.textContent), `player score is numeric (${score1.textContent})`);
 ok(/^\d+$/.test(score2.textContent), `rival score is numeric (${score2.textContent})`);
 ok(Number(score2.textContent) >= 0, 'rival scored a non-negative amount');
 
+section('RACE — HUD fidelity (LCD phases / slider / pause label)');
+const raceKids = descendants(screenEl('race'));
+const lcdEl = raceKids.find((e) => e._cls.has('lcd'));
+const sliderEl = raceKids.find((e) => e._cls.has('slider'));
+const handleEl = sliderEl.children[1];
+const lefttimeEl = raceKids.find((e) => e.style.left === '640px' && e.style.top === '440px');
+const ishardEl = raceKids.find((e) => e.style.left === '20px' && e.style.top === '440px');
+const logEl = raceKids.find((e) => e._cls.has('pixelbox'));
+const sEl = raceKids.find((e) => e.style.left === '130px' && e.style.top === '490px');
+const pauseEl = raceKids.find((e) => e._cls.has('chip'));
+ok(!!lefttimeEl && !!ishardEl && !!sEl, 'label_lefttime / label_isHard / label_S at the game ui coordinates');
+ok(logEl.style.left === '830px' && logEl.style.width === '131px', 'log box is 830,480 131x111 as in gamestart.ui');
+ok(!!handleEl, 'slider carries a handle element (QSlider handle)');
+ok(sliderEl.style.width === '462px' && sliderEl.style.height === '22px', 'slider is 462x22 at 180,440');
+ok(lcdEl.style.color === '#008000', `LCD digits are green while racing (${lcdEl.style.color})`);
+ok(/^[\d.]+s$/.test(lefttimeEl.textContent),
+   `label_lefttime shows seconds (${lefttimeEl.textContent})`);
+ok(ishardEl.textContent === '简单' || ishardEl.textContent === '困难', `label_isHard shows ${ishardEl.textContent}`);
+ok(!!pauseEl && pauseEl.textContent === '暂停游戏', `pause button reads 暂停游戏 (${pauseEl && pauseEl.textContent})`);
+
 section('RACE — pause / resume');
 const sliderFill = descendants(screenEl('race')).find((e) => e._cls.has('slider')).children[0];
 ok(!!sliderFill, 'slider fill element exists');
-clickBtn('race', '暂停');
-ok(modalOpen(), '暂停 button opens the dialog');
+clickBtn('race', '暂停游戏');
+ok(modalOpen(), '暂停游戏 button opens the dialog');
+ok(pauseEl.textContent === '开始游戏', `pause button label toggled to 开始游戏 (${pauseEl.textContent})`);
 ok(activeScreen() === 'race', 'race screen stays active while paused');
 ok(!!dialogBtn('继续') && !!dialogBtn('退到选关'), 'dialog offers 继续 + 退到选关');
 const clockBefore = sliderFill.style.width;
@@ -698,7 +732,7 @@ for (let i = 0; i < 4; i++) pump(50);
 ok(sliderFill.style.width !== clockNow, 'race clock advances after Space-resume');
 
 section('RACE — pause then quit to select');
-clickBtn('race', '暂停');
+clickBtn('race', '暂停游戏');
 clickDialog('退到选关');
 ok(activeScreen() === 'select', '退到选关 -> select');
 ok(rafMap.size === 0, 'race loop torn down after quit (no dangling rAF)');
